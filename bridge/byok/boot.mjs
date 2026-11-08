@@ -341,6 +341,7 @@ export async function bootByok(opts = {}) {
       const add = (h, f) => { const n = normHost(h); if (n && !m.has(n)) m.set(n, f); };
       const cur = byId(config.byok?.provider);
       for (const h of cur?.hosts ?? []) add(h, cur.local ? 'local_model' : 'provider');
+      if (config.byok?.provider === 'openai' && config.byok?.auth === 'oauth') add('auth.openai.com', 'chatgpt_oauth');
       for (const w of widened.values()) for (const h of w.hosts) add(h, w.feature);
       return m;
     };
