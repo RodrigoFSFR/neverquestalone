@@ -155,7 +155,9 @@ test('ChatGPT OAuth browser handoff accepts only the PKCE OpenAI authorize URL a
   assert.equal(isChatGPTAuthorizationUrl(url.href), true);
   assert.equal(isChatGPTAuthorizationUrl(url.href.replace('auth.openai.com', 'evil.example')), false);
   assert.equal(isChatGPTAuthorizationUrl(url.href.replace('/api/accounts/authorize', '/other')), false);
-  assert.equal(isChatGPTAuthorizationUrl(url.href.replace('127.0.0.1:49152', 'evil.example:49152')), false);
+  const badRedirect = new URL(url.href);
+  badRedirect.searchParams.set('redirect_uri', 'http://evil.example:49152/auth/callback');
+  assert.equal(isChatGPTAuthorizationUrl(badRedirect.href), false);
   assert.equal(isChatGPTAuthorizationUrl(url.href.replace('chatgpt.tokens.use.direct', 'profile')), false);
   assert.equal(isChatGPTAuthorizationUrl(url.href.replace('code_challenge_method=S256', 'code_challenge_method=plain')), false);
 });
