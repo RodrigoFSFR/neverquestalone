@@ -149,6 +149,50 @@ export function createKeyStore({ backend = 'os', service = SERVICE, platform = p
       note('delete', provider, { deleted: !!gone });
       return !!gone;
     },
+    // OAuth token bundles can exceed the OS keyring's safe per-entry size. Store them as
+    // bounded ASCII chunks, writing the manifest last so readers never observe a partial bundle.
+    // The underlying entries remain individual OS credential-store items, not files.
+    async getLarge(base) {
+      checkProvider(base);
+      const metaRaw = await impl.get(`${base}-meta`);
+      if (!metaRaw) return null;
+      let meta;
+      try { meta = JSON.parse(metaRaw); } catch { throw keyStoreError('keystore_corrupt', 'the saved credential bundle is corrupt'); }
+      if (!Number.isInteger(meta?.chunks) || meta.chunks < 1 || meta.chunks > 12 || meta.version !== 1) {
+        throw keyStoreError('keystore_corrupt', 'the saved credential bundle has invalid metadata');
+      }
+      let value = '';
+      for (let i = 0; i < meta.chunks; i++) {
+        const part = await impl.get(`${base}-${i}`);
+        if (typeof part !== 'string') throw keyStoreError('keystore_corrupt', 'the saved credential bundle is incomplete');
+        value += part;
+      }
+      return value;
+    },
+    async setLarge(base, value) {
+      checkProvider(base);
+      if (typeof value !== 'string' || !value || value.length > 10_800 || !/^[\\x21-\\x7e]+$/.test(value)) {
+        throw keyStoreError('bad_key', 'the credential bundle is invalid or too large');
+      }
+      const chunks = value.match(/.{1,900}/g) || [];
+      const oldRaw = await impl.get(`${base}-meta`);
+      let oldCount = 0;
+      try { oldCount = JSON.parse(oldRaw || '{}').chunks || 0; } catch {}
+      for (let i = 0; i < chunks.length; i++) await impl.set(`${base}-${i}`, chunks[i]);
+      await impl.set(`${base}-meta`, JSON.stringify({ version: 1, chunks: chunks.length }));
+      for (let i = chunks.length; i < Math.min(oldCount, 12); i++) await impl.delete(`${base}-${i}`);
+      note('set_bundle', base, { chunks: chunks.length });
+    },
+    async deleteLarge(base) {
+      checkProvider(base);
+      const raw = await impl.get(`${base}-meta`);
+      let count = 0;
+      try { count = JSON.parse(raw || '{}').chunks || 0; } catch {}
+      await impl.delete(`${base}-meta`);
+      for (let i = 0; i < Math.min(Number(count) || 0, 12); i++) await impl.delete(`${base}-${i}`);
+      note('delete_bundle', base);
+      return !!raw;
+    },
     // The ids (never the keys) of the providers in `providers` (default: every manifest's) that have one.
     async list(providers = providerIds()) {
       const out = [];
