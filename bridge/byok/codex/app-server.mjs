@@ -41,8 +41,15 @@ export async function testCodexAppServer({
   fs.mkdirSync(home, { recursive: true, mode: 0o700 });
   fs.mkdirSync(workspace, { recursive: true, mode: 0o700 });
   const args = ['app-server', '--listen', 'stdio://', ...PROVIDER_CONFIG.flatMap(v => ['-c', v])];
+  // Do not inherit unrelated API keys or user secrets from the desktop process.
   const env = {
-    ...process.env,
+    PATH: process.env.PATH || '',
+    ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+    ...(process.env.SYSTEMROOT ? { SYSTEMROOT: process.env.SYSTEMROOT } : {}),
+    ...(process.env.WINDIR ? { WINDIR: process.env.WINDIR } : {}),
+    ...(process.env.TEMP ? { TEMP: process.env.TEMP } : {}),
+    ...(process.env.TMP ? { TMP: process.env.TMP } : {}),
+    ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
     CODEX_HOME: home,
     ACCESS_TOKEN: accessToken,
   };
@@ -126,20 +133,21 @@ export async function testCodexAppServer({
       });
       notify('initialized');
       const thread = await request('thread/start', {
-        modelProvider: 'openai_chatgpt_plan',
         cwd: workspace,
         sandbox: 'read-only',
         approvalPolicy: 'never',
-        ephemeral: true,
-        developerInstructions: 'This is a connectivity test. Do not use tools, do not inspect files, and do not run commands. Reply with exactly the word OK.',
       });
       const threadId = thread?.thread?.id;
       if (typeof threadId !== 'string' || !threadId) throw error('codex_bad_thread');
       await request('turn/start', {
         threadId,
-        input: [{ type: 'text', text: 'Reply with exactly OK.' }],
+        input: [{ type: 'text', text: 'This is a connectivity check only. Do not inspect or change files, run commands, or use tools. Reply with exactly OK.' }],
         cwd: workspace,
-        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+        sandboxPolicy: {
+          type: 'readOnly',
+          access: { type: 'restricted', includePlatformDefaults: false, readableRoots: [workspace] },
+          networkAccess: false,
+        },
         approvalPolicy: 'never',
       });
       const status = await turnDone;
@@ -154,8 +162,15 @@ export async function testCodexAppServer({
     throw error(code);
   } finally {
     if (timeout) clearTimeout(timeout);
-    closed = true;
-    try { child.kill(); } catch {}
+    // EOF lets app-server exit cleanly; wait briefly before removing its temporary home.
+    try { child.stdin.end(); } catch {}
+    if (!closed) {
+      await Promise.race([
+        new Promise(resolve => child.once('close', resolve)),
+        new Promise(resolve => { const t = setTimeout(resolve, 1500); t.unref?.(); }),
+      ]);
+    }
+    if (!closed) { try { child.kill(); } catch {} }
     try { lines.close(); } catch {}
     try { fs.rmSync(root, { recursive: true, force: true }); } catch {}
   }
