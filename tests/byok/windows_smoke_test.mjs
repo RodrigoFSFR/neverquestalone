@@ -45,7 +45,7 @@ const onlyWin = WIN ? false : 'Windows only';
 const needExe = !WIN ? 'Windows only' : (HAVE_EXE || process.env.NQA_REQUIRE_HELPER === '1') ? false : `no helper at ${EXE} (bridge/capture/windows/build.sh)`;
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'wcap-winsmoke-'));
 const holders = new Set(); // lock holders still running (holdLock), ended before their folder goes
-test.after(() => { for (const c of holders) endHolder(c); fs.rmSync(TMP, { recursive: true, force: true }); });
+test.after(() => { for (const c of holders) endHolder(c); fs.rmSync(TMP, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
 
 const US = '\x1F';
 const record = (i, body) => ['a1b2c3d4', 'c3f9a1', String(i), '', '', 'Hyjal route', body].join(US);
@@ -551,7 +551,7 @@ test('folders: config and data under %APPDATA%\\NeverQuestAlone (Electron\'s use
     const s = r.stats();
     assert.equal(s.failed, 0, JSON.stringify(s));
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
 
