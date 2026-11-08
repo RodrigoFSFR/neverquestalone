@@ -1599,6 +1599,7 @@
       case 'restart': return { kind: 'bad', line: R('restartLine'), primary: P2(T('common.notRunning.quitReopenBtn'), function () { return B.relaunch(); }, 'quit-reopen'), focus: 'quit-reopen' };
       case 'keystore_error': return { kind: 'bad', line: R('keystoreErrorLine'), primary: P2(T('ai.saveAgainBtn'), function () { return retryKey(pid, where); }, 'save-again'), focus: 'save-again' };
       case 'read_failed': return { kind: 'bad', line: R('readFailedLine'), primary: paste(), focus: 'paste-key' };
+      case 'oauth_failed': return { kind: 'bad', line: R('oauthFailedLine'), primary: P2(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'signin-chatgpt'), focus: 'signin-chatgpt' };
       case 'stage_expired': return { kind: 'warn', line: R('stageExpiredLine'), primary: paste(), focus: 'paste-key' };
       case 'busy': return { kind: 'warn', line: R('busyLine'), primary: null, focus: 'paste-key' };
       default: return { kind: 'bad', line: R('failedLine'), primary: retry(), focus: 'test-again' };
@@ -1736,10 +1737,10 @@
     return B.connectChatGPT().then(function (res) {
       return ensureProviders().then(refreshStatus).then(function () {
         if (res && res.ok) showResult({ ok: true, provider: 'openai', ai: 'ChatGPT' }, where);
-        else showResult({ ok: false, error: 'failed', provider: 'openai', detail: res && res.error ? String(res.error) : 'ChatGPT sign-in did not complete.' }, where);
+        else showResult({ ok: false, error: 'oauth_failed', provider: 'openai' }, where);
       });
     }).catch(function () {
-      showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+      showResult({ ok: false, error: 'oauth_failed', provider: 'openai' }, where);
     });
   }
   function useChatGPT(where) {
@@ -1755,7 +1756,12 @@
   function disconnectChatGPT(where) {
     return B.disconnectChatGPT().then(function (res) {
       return ensureProviders().then(refreshStatus).then(function () {
-        showResult(res && res.ok ? { ok: true, provider: 'openai', ai: 'ChatGPT' } : { ok: false, error: 'failed', provider: 'openai' }, where);
+        if (res && res.ok) {
+          var st = KS(where);
+          if (st) st.slot = null;
+          say(T('ai.chatGPTDisconnectedLine'));
+          rerender();
+        } else showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
       });
     }).catch(function () {
       showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
@@ -1885,7 +1891,8 @@
           var ok = st.slot && st.slot.ok && (st.slot.provider === id || (!st.slot.provider && st.pick === id));
           var chipNode = null;
           if (id === 'custom') chipNode = customOf() && cur && cur.id === 'custom' && aiReady() ? chip(T('ai.connectedChip'), 'ok') : null;
-          else if (ok) chipNode = null; // the tick and the result line say it (APP-D-29)
+          else if (ok) chipNode = null;
+          else if (id === 'openai' && p.oauth && p.oauth.connected) chipNode = chip(T('ai.connectedChip'), 'ok'); // the tick and the result line say it (APP-D-29)
           else if (!(st.slot && st.pick === id) && k.saved) chipNode = rejectedKey(k) ? chip(T('ai.keyRejectedChip'), 'bad') : k.state === 'no_credit' ? chip(T('ai.noCreditChip'), 'warn') : chip(T('ai.keySavedChip'), 'ok');
           var cost = costOf(id);
           return h('button', { type: 'button', class: 'choice' + (checked ? ' is-checked' : ''), 'data-fk': 'card-' + id, id: 'choice-' + id },
