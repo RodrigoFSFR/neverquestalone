@@ -170,6 +170,20 @@ export function secretKeystore(ks, log) {
     label: ks.label,
     get: async (p) => note(await ks.get(p)),
     set: async (p, k) => { note(k); return ks.set(p, k); },
+    getLarge: async (p) => {
+      const raw = await ks.getLarge(p);
+      if (raw) {
+        note(raw);
+        try { const b = JSON.parse(raw); for (const k of ['access_token', 'refresh_token', 'id_token']) note(b?.[k]); } catch {}
+      }
+      return raw;
+    },
+    setLarge: async (p, raw) => {
+      note(raw);
+      try { const b = JSON.parse(raw); for (const k of ['access_token', 'refresh_token', 'id_token']) note(b?.[k]); } catch {}
+      return ks.setLarge(p, raw);
+    },
+    deleteLarge: p => ks.deleteLarge(p),
     delete: p => ks.delete(p),
     list: (ps) => ks.list(ps),
     probe: () => ks.probe?.() ?? Promise.resolve({ ok: true }),
