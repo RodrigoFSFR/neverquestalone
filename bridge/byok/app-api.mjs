@@ -941,15 +941,18 @@ export function createAppApi(opts = {}) {
           return { ok: false, error: 'no_models' };
         }
         const effort = startEffort(m, model);
-        const previous = { provider: B().provider, model: B().model, effort: B().effort, auth: B().auth, authBy: B().authBy.openai, oauthModel: B().authBy.openaiModel };
+        const previous = { provider: B().provider, model: B().model, effort: B().effort, auth: B().auth, authBy: B().authBy.openai,
+          oauthModel: B().authBy.openaiModel, oauthModels: B().authBy.openaiModels };
         B().authBy.openai = 'oauth';
         B().authBy.openaiModel = model;
+        B().authBy.openaiModels = available;
         Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
         try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
         catch (e) {
           Object.assign(B(), { provider: previous.provider, model: previous.model, effort: previous.effort, auth: previous.auth });
           if (previous.authBy === undefined) delete B().authBy.openai; else B().authBy.openai = previous.authBy;
           if (previous.oauthModel === undefined) delete B().authBy.openaiModel; else B().authBy.openaiModel = previous.oauthModel;
+          if (previous.oauthModels === undefined) delete B().authBy.openaiModels; else B().authBy.openaiModels = previous.oauthModels;
           return { ok: false, error: 'failed' };
         }
         persist();
@@ -1003,6 +1006,7 @@ export function createAppApi(opts = {}) {
         const effort = startEffort(m, model);
         B().authBy.openai = 'oauth';
         B().authBy.openaiModel = model;
+        B().authBy.openaiModels = available;
         Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
         try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
         catch { return { ok: false, error: 'failed' }; }
@@ -1022,7 +1026,11 @@ export function createAppApi(opts = {}) {
         await disconnectChatGPT({ store: keystore, fetch });
       } catch (e) { return { ok: false, error: e?.code || 'keystore_error' }; }
       finally { try { release?.(); } catch {} }
-      if (B().authBy.openai === 'oauth') delete B().authBy.openai;
+      if (B().authBy.openai === 'oauth') {
+        delete B().authBy.openai;
+        delete B().authBy.openaiModel;
+        delete B().authBy.openaiModels;
+      }
       if (B().provider === 'openai' && B().auth === 'oauth') {
         B().auth = 'key';
         try { await S.backend?.setConfig?.({ auth: 'key' }); } catch {}
@@ -1062,7 +1070,9 @@ export function createAppApi(opts = {}) {
           hidden: !!t.hidden,
           auth: local ? 'local' : 'key',
           ...(t.id === 'openai' ? { oauth: { connected: await (async () => { try { return !!(await keystore.getLarge('openai-oauth')); } catch { return false; } })() } } : {}),
-          models: modelsOf(t),
+          models: t.id === 'openai' && B().authBy.openai === 'oauth' && Array.isArray(B().authBy.openaiModels)
+            ? modelsOf(t).filter(model => B().authBy.openaiModels.includes(model.id))
+            : modelsOf(t),
           ...playerCard(t),
           terms: { link: linkId(t, local ? 'privacy' : 'terms'), recorded: termsOk(t) },
           key: local ? null : await keyView(t.id),
@@ -1189,6 +1199,8 @@ export function createAppApi(opts = {}) {
       // another model), none for a model without levels, and none asked stays none (the model's own).
       const effort = v.effort == null ? null : nearestEffort(effortLevels(m, v.model), v.effort);
       const auth = m.id === 'openai' && B().authBy.openai === 'oauth' ? 'oauth' : 'key';
+      if (m.id === 'openai' && auth === 'oauth' && Array.isArray(B().authBy.openaiModels) &&
+          !B().authBy.openaiModels.includes(v.model)) return { ok: false, error: 'model_access' };
       // Other's model is part of its service's settings: a new one is saved with them.
       const custom = isCustom(m) ? { baseUrl: m.baseUrl, model: v.model } : undefined;
       if (custom) B().custom = custom;
