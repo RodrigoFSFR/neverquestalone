@@ -112,6 +112,9 @@ window.BonesStrings = {
     otherCostLine: 'Cost varies', // Other's row
     hiddenLine: '{ai} isn’t available right now. Pick another.',
     pasteBtn: 'Paste {co} key',
+    signInChatGPT: 'Sign in with ChatGPT',
+    useChatGPT: 'Use saved ChatGPT account',
+    disconnectChatGPT: 'Disconnect ChatGPT account',
     noKeyLink: 'No key yet?', // a help link that is its question (STYLE §3): the numbered key steps behind it (onboarding critic ON-01)
     keyStepSignIn: 'Click Open {co}’s key page, then sign in or make an account.',
     keyStepBack: 'Come back to this window and click Paste {co} key.',
