@@ -2,7 +2,7 @@
 // request is the app's own page from its scheme (nqa://app/, only paths that can name a
 // renderer file), https to the four update-feed hosts only while update checks are on, and
 // nothing else: never file:, never the providers (those are the bridge's, through Node), never
-// the OpenRouter sign-in page (the player's own browser opens it, through shell.openExternal).
+// external pages in Chromium: ChatGPT OAuth alone may be handed to the system browser after strict URL validation.
 // The ledger feeding Connections keeps only the scheme and host of a refused request.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -18,6 +18,7 @@ import {
   checkShellRequest, createShellLedger, installShellGuard, UPDATE_HOSTS, UPDATER_PARTITION, updateFeature, guardNetworkEnv, refuseLine, REFUSED_ENV, EXTRA_CA_ENV,
   LOADER_ENV_PREFIX, loaderVariable, guardLoaderEnv, DEBUG_SWITCHES, debugSwitches, LAUNCH_SWITCHES, ALLOWED_SWITCHES, SELF_TEST_SWITCHES, switchNames, allowedSwitch, launchSwitches, switchLine,
 } from '../../app/desktop/src/net-guard.mjs';
+import { isChatGPTAuthorizationUrl } from '../../app/desktop/src/oauth-browser.mjs';
 
 const APP = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'app', 'desktop');
 const REPO = path.join(APP, '..', '..');
@@ -128,11 +129,35 @@ test('refused: file: everywhere, every other scheme, host, port and look-alike, 
   assert.equal(checkShellRequest('devtools://devtools/x', { allowDevtools: true }).allow, true, 'devtools only when asked (unpackaged runs)');
 });
 
-test('no sign-in page opens anywhere (the OpenRouter sign-in is gone: OpenRouter connects through Other with a key), and a page never opens a window of its own', () => {
+test('only the validated ChatGPT OAuth authorize URL may open in the system browser; renderer pages cannot open windows', () => {
   const main = code(fs.readFileSync(path.join(APP, 'main.mjs'), 'utf8'));
-  assert.doesNotMatch(main, /openSignInUrl|signInUrlOk|openExternal: /);
+  assert.doesNotMatch(main, /openSignInUrl|signInUrlOk/);
+  assert.match(main, /async function openChatGPTAuthUrl\(url\)/);
+  assert.match(main, /isChatGPTAuthorizationUrl\(url\)/);
+  assert.match(main, /openExternal: openChatGPTAuthUrl/);
   assert.doesNotMatch(main, /loadURL\([^)]*openrouter/i);
-  assert.match(main, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/, 'a page can never open a window of its own');
+  assert.match(main, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/, 'a renderer page can never open a window of its own');
+});
+
+test('ChatGPT OAuth browser handoff accepts only the PKCE OpenAI authorize URL and a loopback callback', () => {
+  const url = new URL('https://auth.openai.com/api/accounts/authorize');
+  const q = url.searchParams;
+  q.set('response_type', 'code');
+  q.set('client_id', 'dynamic_agent_client');
+  q.set('redirect_uri', 'http://127.0.0.1:49152/auth/callback');
+  q.set('scope', 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct');
+  q.set('resource', 'https://api.openai.com/v1');
+  q.set('code_challenge_method', 'S256');
+  q.set('code_challenge', 'a'.repeat(43));
+  q.set('state', 's'.repeat(43));
+  q.set('nonce', 'n'.repeat(43));
+  q.set('ext_agent_host_id', 'urn:uuid:123e4567-e89b-12d3-a456-426614174000');
+  assert.equal(isChatGPTAuthorizationUrl(url.href), true);
+  assert.equal(isChatGPTAuthorizationUrl(url.href.replace('auth.openai.com', 'evil.example')), false);
+  assert.equal(isChatGPTAuthorizationUrl(url.href.replace('/api/accounts/authorize', '/other')), false);
+  assert.equal(isChatGPTAuthorizationUrl(url.href.replace('127.0.0.1:49152', 'evil.example:49152')), false);
+  assert.equal(isChatGPTAuthorizationUrl(url.href.replace('chatgpt.tokens.use.direct', 'profile')), false);
+  assert.equal(isChatGPTAuthorizationUrl(url.href.replace('code_challenge_method=S256', 'code_challenge_method=plain')), false);
 });
 
 test('the ledger: allowed update requests with counts and a feature; page loads counted; refused ones by scheme and host only', () => {
