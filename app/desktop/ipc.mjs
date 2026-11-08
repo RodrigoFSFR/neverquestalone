@@ -560,6 +560,28 @@ export const HANDLERS = {
     },
   },
   providers: { input: NONE, run: ctx => ctx.api.providers() },
+  connectChatGPT: {
+    input: NONE,
+    announce: true,
+    confirm: () => ({
+      message: 'Sign in to ChatGPT?',
+      detail: 'NeverQuestAlone will open your browser for OpenAI sign-in. Your ChatGPT plan may be used for AI requests from this app, subject to OpenAI and plan eligibility. Requests include the game context enabled in this app. The sign-in tokens stay in your OS credential store.',
+      okLabel: 'Continue to sign in',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+    }),
+    run: ctx => ctx.api.connectChatGPT(),
+  },
+  disconnectChatGPT: {
+    input: NONE,
+    confirm: () => ({
+      message: 'Disconnect your ChatGPT account?',
+      detail: 'NeverQuestAlone will revoke and remove the saved ChatGPT OAuth credentials. An OpenAI API key, if you have one, is kept separately.',
+      okLabel: 'Disconnect',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+      destructive: true,
+    }),
+    run: ctx => ctx.api.disconnectChatGPT(),
+  },
   appInfo: { input: NONE, run: ctx => ctx.info() },
   notices: { input: NONE, run: ctx => ctx.notices() },
   appState: { input: NONE, run: ctx => ctx.appState.get() },
