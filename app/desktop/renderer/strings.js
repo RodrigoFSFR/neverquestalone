@@ -115,6 +115,8 @@ window.BonesStrings = {
     signInChatGPT: 'Sign in with ChatGPT',
     useChatGPT: 'Use saved ChatGPT account',
     disconnectChatGPT: 'Disconnect ChatGPT account',
+    oauthFailedLine: 'ChatGPT sign-in could not be completed. Check plan and app eligibility, then try again.',
+    chatGPTDisconnectedLine: 'Your ChatGPT account is disconnected.',
     noKeyLink: 'No key yet?', // a help link that is its question (STYLE §3): the numbered key steps behind it (onboarding critic ON-01)
     keyStepSignIn: 'Click Open {co}’s key page, then sign in or make an account.',
     keyStepBack: 'Come back to this window and click Paste {co} key.',
