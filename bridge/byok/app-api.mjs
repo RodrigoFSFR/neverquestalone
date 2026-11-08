@@ -979,8 +979,12 @@ export function createAppApi(opts = {}) {
     },
 
     async disconnectChatGPT() {
-      try { await disconnectChatGPT({ store: keystore, fetch }); }
-      catch (e) { return { ok: false, error: e?.code || 'keystore_error' }; }
+      let release = null;
+      try {
+        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth_revoke') ?? null;
+        await disconnectChatGPT({ store: keystore, fetch });
+      } catch (e) { return { ok: false, error: e?.code || 'keystore_error' }; }
+      finally { try { release?.(); } catch {} }
       if (B().authBy.openai === 'oauth') delete B().authBy.openai;
       if (B().provider === 'openai' && B().auth === 'oauth') {
         B().auth = 'key';
