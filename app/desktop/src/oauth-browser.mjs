@@ -13,14 +13,14 @@ export function isChatGPTAuthorizationUrl(raw) {
       !/^[A-Za-z0-9_-]{40,128}$/.test(q.get('code_challenge') || '') ||
       !/^[A-Za-z0-9_-]{32,128}$/.test(q.get('state') || '') ||
       !/^[A-Za-z0-9_-]{32,128}$/.test(q.get('nonce') || '') ||
-      !String(q.get('scope') || '').split(/\\s+/).includes('chatgpt.tokens.use.direct') ||
+      !String(q.get('scope') || '').split(/\s+/).includes('chatgpt.tokens.use.direct') ||
       !/^urn:uuid:[0-9a-f-]{36}$/i.test(q.get('ext_agent_host_id') || '')) return false;
 
   let redirect;
   try { redirect = new URL(q.get('redirect_uri') || ''); } catch { return false; }
   if (redirect.protocol !== 'http:' || redirect.hostname !== '127.0.0.1' ||
       redirect.username || redirect.password || redirect.pathname !== '/auth/callback' ||
-      redirect.search || redirect.hash || !/^\\d+$/.test(redirect.port)) return false;
+      redirect.search || redirect.hash || !/^\d+$/.test(redirect.port)) return false;
   const port = Number(redirect.port);
   return Number.isInteger(port) && port >= 1 && port <= 65535;
 }
