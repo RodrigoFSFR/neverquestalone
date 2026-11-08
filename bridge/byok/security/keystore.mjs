@@ -18,6 +18,7 @@
 //
 // Values never reach a log, an error message or list(): list() returns
 // provider ids. maskKey() is the only way a key is ever shown ('sk-ant-…A1b2').
+import crypto from 'node:crypto';
 import { providerIds } from '../providers/index.mjs';
 import { IDENTITY } from '../../identity.mjs';
 
@@ -150,20 +151,21 @@ export function createKeyStore({ backend = 'os', service = SERVICE, platform = p
       return !!gone;
     },
     // OAuth token bundles can exceed the OS keyring's safe per-entry size. Store them as
-    // bounded ASCII chunks, writing the manifest last so readers never observe a partial bundle.
-    // The underlying entries remain individual OS credential-store items, not files.
+    // bounded ASCII chunks. A fresh generation is written first and the metadata pointer last:
+    // an interrupted replacement never overwrites the previous complete bundle.
     async getLarge(base) {
       checkProvider(base);
       const metaRaw = await impl.get(`${base}-meta`);
       if (!metaRaw) return null;
       let meta;
       try { meta = JSON.parse(metaRaw); } catch { throw keyStoreError('keystore_corrupt', 'the saved credential bundle is corrupt'); }
-      if (!Number.isInteger(meta?.chunks) || meta.chunks < 1 || meta.chunks > 12 || meta.version !== 1) {
+      if (!Number.isInteger(meta?.chunks) || meta.chunks < 1 || meta.chunks > 12 ||
+          meta.version !== 1 || !/^[a-f0-9]{12}$/.test(meta.generation || '')) {
         throw keyStoreError('keystore_corrupt', 'the saved credential bundle has invalid metadata');
       }
       let value = '';
       for (let i = 0; i < meta.chunks; i++) {
-        const part = await impl.get(`${base}-${i}`);
+        const part = await impl.get(`${base}-${meta.generation}-${i}`);
         if (typeof part !== 'string') throw keyStoreError('keystore_corrupt', 'the saved credential bundle is incomplete');
         value += part;
       }
@@ -171,25 +173,36 @@ export function createKeyStore({ backend = 'os', service = SERVICE, platform = p
     },
     async setLarge(base, value) {
       checkProvider(base);
-      if (typeof value !== 'string' || !value || value.length > 10_800 || !/^[\x21-\x7e]+$/.test(value)) {
+      if (typeof value !== 'string' || !value || value.length > 10_800 || !/^[\\x21-\\x7e]+$/.test(value)) {
         throw keyStoreError('bad_key', 'the credential bundle is invalid or too large');
       }
       const chunks = value.match(/.{1,900}/g) || [];
-      const oldRaw = await impl.get(`${base}-meta`);
-      let oldCount = 0;
-      try { oldCount = JSON.parse(oldRaw || '{}').chunks || 0; } catch {}
-      for (let i = 0; i < chunks.length; i++) await impl.set(`${base}-${i}`, chunks[i]);
-      await impl.set(`${base}-meta`, JSON.stringify({ version: 1, chunks: chunks.length }));
-      for (let i = chunks.length; i < Math.min(oldCount, 12); i++) await impl.delete(`${base}-${i}`);
+      const metaKey = `${base}-meta`;
+      const oldRaw = await impl.get(metaKey);
+      let oldMeta = null;
+      try { oldMeta = JSON.parse(oldRaw || 'null'); } catch {}
+      const generation = crypto.randomBytes(6).toString('hex');
+      for (let i = 0; i < chunks.length; i++) await impl.set(`${base}-${generation}-${i}`, chunks[i]);
+      await impl.set(metaKey, JSON.stringify({ version: 1, chunks: chunks.length, generation }));
+      if (/^[a-f0-9]{12}$/.test(oldMeta?.generation || '')) {
+        for (let i = 0; i < Math.min(Number(oldMeta.chunks) || 0, 12); i++) {
+          await impl.delete(`${base}-${oldMeta.generation}-${i}`);
+        }
+      }
       note('set_bundle', base, { chunks: chunks.length });
     },
     async deleteLarge(base) {
       checkProvider(base);
-      const raw = await impl.get(`${base}-meta`);
-      let count = 0;
-      try { count = JSON.parse(raw || '{}').chunks || 0; } catch {}
-      await impl.delete(`${base}-meta`);
-      for (let i = 0; i < Math.min(Number(count) || 0, 12); i++) await impl.delete(`${base}-${i}`);
+      const metaKey = `${base}-meta`;
+      const raw = await impl.get(metaKey);
+      let meta = null;
+      try { meta = JSON.parse(raw || 'null'); } catch {}
+      await impl.delete(metaKey);
+      if (/^[a-f0-9]{12}$/.test(meta?.generation || '')) {
+        for (let i = 0; i < Math.min(Number(meta.chunks) || 0, 12); i++) {
+          await impl.delete(`${base}-${meta.generation}-${i}`);
+        }
+      }
       note('delete_bundle', base);
       return !!raw;
     },
