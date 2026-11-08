@@ -46,6 +46,7 @@ import { setupView } from './setup-view.mjs';
 import { createScreenPermission, ASKED_MS } from './screen-permission.mjs';
 import { REPO, LEGACY_CUSTOM } from '../config.mjs';
 import { signInWithChatGPT, disconnectChatGPT, chatGPTAccessToken } from './auth/chatgpt-oauth.mjs';
+import { testCodexAppServer } from './codex/app-server.mjs';
 
 export const PRODUCT = 'NeverQuestAlone';
 export const RETENTION_DAYS = 30;
@@ -957,6 +958,24 @@ export function createAppApi(opts = {}) {
       } catch (e) {
         log('app-oauth-connect-failed', { error: scrub(e?.code || e?.message || 'failed').slice(0, 80) });
         return { ok: false, error: e?.code === 'oauth_timeout' ? 'oauth_timeout' : 'oauth_failed' };
+      } finally { try { release?.(); } catch {} }
+    },
+
+    async testCodex() {
+      let release = null;
+      try {
+        if (!(await keystore.getLarge?.('openai-oauth'))) return { ok: false, error: 'oauth_not_connected' };
+        // A refresh, if needed, goes through the bridge guard. Codex itself receives the token via
+        // ACCESS_TOKEN, as documented by OpenAI; the child has a fresh CODEX_HOME and read-only sandbox.
+        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth_refresh') ?? null;
+        const accessToken = await chatGPTAccessToken({ store: keystore, fetch });
+        return await testCodexAppServer({ accessToken, version: version || '1.4.19' });
+      } catch (e) {
+        const code = ['codex_not_installed', 'codex_start_failed', 'codex_process_closed', 'codex_timeout',
+          'codex_rpc_error', 'codex_bad_thread', 'codex_turn_failed', 'oauth_not_connected'].includes(e?.code)
+          ? e.code : 'codex_failed';
+        log('codex-app-server-test-failed', { error: code });
+        return { ok: false, error: code };
       } finally { try { release?.(); } catch {} }
     },
 
