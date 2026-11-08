@@ -135,6 +135,7 @@ const initialState = () => ({
 export function createMockApi({ now = Date.now, platform = process.platform, delayMs = 120, controllable = false } = {}) {
   const listeners = new Set();
   let s = initialState();
+  let mockOAuthConnected = false;
   // The real manifests' player text (the screenshot mode loads it: bridge/byok/app-api.mjs playerCard), by provider.
   let playerText = null;
   // The bridge's own lastErrorView (app-api.mjs), which turns the backend's last failure into the window's card.
@@ -353,6 +354,7 @@ export function createMockApi({ now = Date.now, platform = process.platform, del
         }
         return {
           ...p,
+          ...(p.id === 'openai' ? { oauth: { connected: mockOAuthConnected } } : {}),
           hidden: s.hidden.includes(p.id),
           ...(s.smarter?.[p.id] ? { models: p.models.map(m => ({ ...m, tier: m.id === s.smarter[p.id] ? 'smarter' : m.tier })) } : {}),
           ...(playerText?.[p.id] ? { privacyCard: { ...p.privacyCard, ...playerText[p.id].privacyCard }, notes: playerText[p.id].notes } : {}),
@@ -466,6 +468,39 @@ export function createMockApi({ now = Date.now, platform = process.platform, del
       return { ok: true, name: new URL(c.baseUrl).host, model, local: c.local, ...(key ? { masked: maskKey(key) } : {}), testCall: { ok: true, micros: 0 } };
     },
     // As the real choose saves it: the model's nearest level to the one asked for (none for a model without levels).
+    async connectChatGPT() {
+      await wait();
+      await gate('connectChatGPT');
+      const f = forced('connectChatGPT');
+      if (f) return f;
+      mockOAuthConnected = true;
+      const p = find('openai');
+      const model = p.models[0]?.id;
+      if (model) s.choice = { provider: 'openai', model, effort: 'low' };
+      changed();
+      return { ok: true, provider: 'openai', model };
+    },
+    async useChatGPT() {
+      await wait();
+      await gate('useChatGPT');
+      const f = forced('useChatGPT');
+      if (f) return f;
+      if (!mockOAuthConnected) return { ok: false, error: 'oauth_not_connected' };
+      const p = find('openai');
+      const model = p.models[0]?.id;
+      s.choice = { provider: 'openai', model, effort: 'low' };
+      changed();
+      return { ok: true, provider: 'openai', model };
+    },
+    async disconnectChatGPT() {
+      await wait();
+      await gate('disconnectChatGPT');
+      const f = forced('disconnectChatGPT');
+      if (f) return f;
+      mockOAuthConnected = false;
+      changed();
+      return { ok: true };
+    },
     async testCodex() {
       await wait(80);
       await gate('testCodex');
