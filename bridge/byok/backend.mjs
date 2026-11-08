@@ -778,10 +778,24 @@ export function createLocalBackend(handlers = {}, opts = {}) {
   async function checkKey() {
     let p;
     try { p = current(); } catch { keyState = 'missing'; keyReason = 'unknown provider'; return; }
-    if (p.local) { keyState = 'ok'; return; }
+    if (p.local) { keyState = 'ok'; keyReason = null; return; }
+    if (!keystore) { keyState = 'missing'; keyReason = 'no key store'; return; }
+    // ChatGPT plan OAuth credentials live in the large secure store, not the API-key slot list.
+    // Validate/refresh the OAuth access token here so status() agrees with the credential path
+    // used by createProvider(). A successful browser callback must not be reported as "no key".
+    if (p.id === 'openai' && settings.auth === 'oauth') {
+      try {
+        await chatGPTAccessToken({ store: keystore, fetch: opts.fetch ?? globalThis.fetch });
+        keyState = 'ok';
+        keyReason = null;
+      } catch (error) {
+        keyState = 'missing';
+        keyReason = error?.message === 'oauth_not_connected' ? 'no ChatGPT sign-in' : 'ChatGPT sign-in unavailable';
+      }
+      return;
+    }
     // Other (custom) runs with or without a key: the service it names decides (a 401 is auth_invalid).
     if (p.manifest.auth?.optional === true) { if (keyState === 'missing') { keyState = 'ok'; keyReason = null; } return; }
-    if (!keystore) { keyState = 'missing'; keyReason = 'no key store'; return; }
     try {
       const has = typeof keystore.list === 'function' ? (await keystore.list([p.id])).includes(p.id) : !!(await keystore.get(p.id));
       if (!has) { keyState = 'missing'; keyReason = 'no key'; } else if (keyState === 'missing') { keyState = 'ok'; keyReason = null; }
