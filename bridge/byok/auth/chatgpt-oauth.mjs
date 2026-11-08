@@ -64,7 +64,7 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
   if (!store || typeof store.get !== 'function' || typeof store.set !== 'function' || typeof openExternal !== 'function') {
     throw new TypeError('store and openExternal are required');
   }
-  const priorRaw = await store.get('openai-chatgpt-oauth');
+  const priorRaw = await store.getLarge('openai-oauth');
   let prior = null;
   try { prior = priorRaw ? JSON.parse(priorRaw) : null; } catch {}
   const verifier = b64url(crypto.randomBytes(32));
@@ -130,7 +130,7 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
     const bundle = { client_id: result.issuedClientId, access_token: tokens.access_token,
       refresh_token: tokens.refresh_token, id_token: tokens.id_token,
       expires_at: Date.now() + Number(tokens.expires_in || 0) * 1000 };
-    await store.set('openai-chatgpt-oauth', JSON.stringify(bundle));
+    await store.setLarge('openai-oauth', JSON.stringify(bundle));
     return { ok: true, expiresAt: bundle.expires_at };
   } finally {
     clearTimeout(timer);
@@ -140,7 +140,7 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
 
 /** Refresh and atomically replace rotating credentials before returning an access token. */
 export async function chatGPTAccessToken({ store, fetch: fetchFn = globalThis.fetch, now = Date.now } = {}) {
-  const raw = await store.get('openai-chatgpt-oauth');
+  const raw = await store.getLarge('openai-oauth');
   if (!raw) throw new Error('oauth_not_connected');
   let saved;
   try { saved = JSON.parse(raw); } catch { throw new Error('oauth_credentials_corrupt'); }
@@ -153,12 +153,12 @@ export async function chatGPTAccessToken({ store, fetch: fetchFn = globalThis.fe
   if (!tokens.access_token || !tokens.refresh_token) throw new Error('oauth_refresh_invalid_response');
   const next = { ...saved, access_token: tokens.access_token, refresh_token: tokens.refresh_token,
     id_token: tokens.id_token || saved.id_token, expires_at: now() + Number(tokens.expires_in || 0) * 1000 };
-  await store.set('openai-chatgpt-oauth', JSON.stringify(next));
+  await store.setLarge('openai-oauth', JSON.stringify(next));
   return next.access_token;
 }
 
 export async function disconnectChatGPT({ store, fetch: fetchFn = globalThis.fetch } = {}) {
-  const raw = await store.get('openai-chatgpt-oauth');
+  const raw = await store.getLarge('openai-oauth');
   if (!raw) return { ok: true };
   let saved;
   try { saved = JSON.parse(raw); } catch { saved = null; }
@@ -171,7 +171,7 @@ export async function disconnectChatGPT({ store, fetch: fetchFn = globalThis.fet
       });
     } catch { /* local deletion still takes precedence */ }
   }
-  await store.delete('openai-chatgpt-oauth');
+  await store.deleteLarge('openai-oauth');
   return { ok: true };
 }
 
