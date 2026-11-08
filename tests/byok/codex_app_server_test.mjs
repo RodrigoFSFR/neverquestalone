@@ -11,6 +11,10 @@ function fakeSpawn({ complete = true, exitAfter = false, stallAt = null } = {}) 
     const child = new EventEmitter();
     child.stdin = {
       destroyed: false,
+      end() {
+        this.destroyed = true;
+        setImmediate(() => child.emit('close', 0));
+      },
       write(line) {
         const msg = JSON.parse(line);
         calls.push(msg);
@@ -31,7 +35,7 @@ function fakeSpawn({ complete = true, exitAfter = false, stallAt = null } = {}) 
     };
     child.stdout = new PassThrough();
     child.stderr = new PassThrough();
-    child.kill = () => { child.stdin.destroyed = true; return true; };
+    child.kill = () => { child.stdin.destroyed = true; setImmediate(() => child.emit('close', 1)); return true; };
     spawn.last = { command, args, options, child };
     return child;
   };
