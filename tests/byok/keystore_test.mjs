@@ -185,3 +185,20 @@ test('keystore: the real OS keychain (opt-in: NQA_TEST_REAL_KEYCHAIN=1)', { skip
 // D-06: keys an earlier alpha build saved under the service "NeverQuestAlone" move to "NeverQuestAlone"
 // once: read, write, delete; a key already under the new name wins; the first refusal stops it
 // (the player is asked at most once), and nothing ever reaches the log.
+
+test('keystore: large OAuth bundles round-trip in bounded keyring chunks', async () => {
+  for (const ks of [
+    createKeyStore({ backend: 'memory' }),
+    createKeyStore({ backend: 'os', platform: 'win32', keyring: fakeKeyring().mod }),
+  ]) {
+    const bundle = JSON.stringify({ access_token: 'a'.repeat(1400), refresh_token: 'r'.repeat(1800), id_token: 'i'.repeat(1600), client_id: 'oaiapp_example' });
+    await ks.setLarge('openai-oauth', bundle);
+    assert.equal(await ks.getLarge('openai-oauth'), bundle);
+    assert.equal((await ks.get('openai-oauth-0')).length, 900);
+    await ks.setLarge('openai-oauth', JSON.stringify({ access_token: 'short' }));
+    assert.equal(await ks.getLarge('openai-oauth'), JSON.stringify({ access_token: 'short' }));
+    assert.equal(await ks.deleteLarge('openai-oauth'), true);
+    assert.equal(await ks.getLarge('openai-oauth'), null);
+    assert.equal(await ks.deleteLarge('openai-oauth'), false);
+  }
+});
