@@ -144,6 +144,7 @@ import { createMemory, liveQuests } from './runtime/memory.mjs';
 import { applyLogbook } from './runtime/logbook.mjs';
 import { sanitizeState, sanitizeArgs, sanitizeGameString, typedLooksLikeKey } from './runtime/sanitize.mjs';
 import { createPriceBook, localPrice } from './usage/prices.mjs';
+import { chatGPTAccessToken } from './auth/chatgpt-oauth.mjs';
 import { estimateTurn, meterReply } from './usage/meter.mjs';
 import { createCaps, localDay } from './usage/caps.mjs';
 import { createLedger } from './ledger.mjs';
@@ -554,8 +555,11 @@ export function createLocalBackend(handlers = {}, opts = {}) {
     const provider = createProvider(manifest, {
       getKey: async (id) => {
         if (!keystore) return null;
-        const key = await keystore.get(id);
-        return key && settings.auth === 'oauth' ? { key, kind: 'oauth' } : key;
+        if (id === 'openai' && settings.auth === 'oauth') {
+          const key = await chatGPTAccessToken({ store: keystore, fetch: opts.fetch ?? globalThis.fetch });
+          return { key, kind: 'oauth' };
+        }
+        return keystore.get(id);
       },
       log,
       now: clock,
