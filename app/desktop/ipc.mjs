@@ -571,6 +571,16 @@ export const HANDLERS = {
     }),
     run: ctx => ctx.api.connectChatGPT(),
   },
+  useChatGPT: {
+    input: NONE,
+    confirm: () => ({
+      message: 'Use your saved ChatGPT account?',
+      detail: 'NeverQuestAlone will switch AI requests to your saved ChatGPT sign-in. API-key credentials, if saved, remain separate.',
+      okLabel: 'Use ChatGPT',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+    }),
+    run: ctx => ctx.api.useChatGPT(),
+  },
   disconnectChatGPT: {
     input: NONE,
     confirm: () => ({
