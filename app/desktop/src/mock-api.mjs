@@ -466,6 +466,12 @@ export function createMockApi({ now = Date.now, platform = process.platform, del
       return { ok: true, name: new URL(c.baseUrl).host, model, local: c.local, ...(key ? { masked: maskKey(key) } : {}), testCall: { ok: true, micros: 0 } };
     },
     // As the real choose saves it: the model's nearest level to the one asked for (none for a model without levels).
+    async testCodex() {
+      await wait(80);
+      await gate('testCodex');
+      const f = forced('testCodex');
+      return f || { ok: true, status: 'completed' };
+    },
     async choose({ provider, model, effort }) {
       const m = find(provider)?.models.find(x => x.id === model);
       s.choice = { provider, model, effort: effort == null ? null : (nearestEffort(m?.efforts ?? [], effort) ?? null) };
