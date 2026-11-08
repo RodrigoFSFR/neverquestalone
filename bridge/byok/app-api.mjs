@@ -1004,12 +1004,22 @@ export function createAppApi(opts = {}) {
           : available.includes(m.models?.default) ? m.models.default : available[0];
         if (!model) return { ok: false, error: 'no_models' };
         const effort = startEffort(m, model);
+        const previous = {
+          provider: B().provider, model: B().model, effort: B().effort, auth: B().auth,
+          oauthAuth: B().authBy.openai, oauthModel: B().authBy.openaiModel, oauthModels: B().authBy.openaiModels,
+        };
         B().authBy.openai = 'oauth';
         B().authBy.openaiModel = model;
         B().authBy.openaiModels = available;
         Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
         try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
-        catch { return { ok: false, error: 'failed' }; }
+        catch {
+          Object.assign(B(), { provider: previous.provider, model: previous.model, effort: previous.effort, auth: previous.auth });
+          if (previous.oauthAuth === undefined) delete B().authBy.openai; else B().authBy.openai = previous.oauthAuth;
+          if (previous.oauthModel === undefined) delete B().authBy.openaiModel; else B().authBy.openaiModel = previous.oauthModel;
+          if (previous.oauthModels === undefined) delete B().authBy.openaiModels; else B().authBy.openaiModels = previous.oauthModels;
+          return { ok: false, error: 'failed' };
+        }
         persist();
         try { await S.backend?.refresh?.({ keyChanged: true }); } catch {}
         changed();
