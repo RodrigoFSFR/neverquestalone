@@ -779,6 +779,9 @@ export function createLocalBackend(handlers = {}, opts = {}) {
     let p;
     try { p = current(); } catch { keyState = 'missing'; keyReason = 'unknown provider'; return; }
     if (p.local) { keyState = 'ok'; keyReason = null; return; }
+    // A provider that explicitly permits keyless access (including a home-network model server)
+    // does not require a keystore. Its endpoint decides whether a credential is needed.
+    if (p.manifest.auth?.optional === true) { if (keyState === 'missing') { keyState = 'ok'; keyReason = null; } return; }
     if (!keystore) { keyState = 'missing'; keyReason = 'no key store'; return; }
     // ChatGPT plan OAuth credentials live in the large secure store, not the API-key slot list.
     // Validate/refresh the OAuth access token here so status() agrees with the credential path
@@ -794,8 +797,7 @@ export function createLocalBackend(handlers = {}, opts = {}) {
       }
       return;
     }
-    // Other (custom) runs with or without a key: the service it names decides (a 401 is auth_invalid).
-    if (p.manifest.auth?.optional === true) { if (keyState === 'missing') { keyState = 'ok'; keyReason = null; } return; }
+    // Other providers with required credentials are checked in the OS key store.
     try {
       const has = typeof keystore.list === 'function' ? (await keystore.list([p.id])).includes(p.id) : !!(await keystore.get(p.id));
       if (!has) { keyState = 'missing'; keyReason = 'no key'; } else if (keyState === 'missing') { keyState = 'ok'; keyReason = null; }
