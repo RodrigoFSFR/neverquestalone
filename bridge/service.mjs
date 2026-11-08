@@ -1953,7 +1953,7 @@ export function createBridge(config, deps) {
       store.flush();
       await gateway?.stop?.();
       store.flush(); // what the backend's stop settled
-      writer?.stop(); // the write queue drained, then ended (BR-04): every write above is on disk
+      await writer?.stop?.(); // wait for the worker thread to exit before its AddOns tree can be removed
     },
     status() {
       return {
