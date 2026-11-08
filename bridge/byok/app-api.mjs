@@ -920,7 +920,7 @@ export function createAppApi(opts = {}) {
       let release = null;
       try {
         // Only the OAuth issuer and JWKS host are widened for this sign-in operation.
-        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth') ?? null;
+        release = egress?.widen?.(['auth.openai.com', 'api.openai.com'], 'chatgpt_oauth') ?? null;
         const signed = await signInWithChatGPT({ store: keystore, openExternal, fetch });
         if (!signed?.ok) return signed ?? { ok: false, error: 'oauth_failed' };
         // Discover only models the OAuth account is explicitly allowed to list; do not assume
@@ -969,7 +969,7 @@ export function createAppApi(opts = {}) {
         if (!(await keystore.getLarge?.('openai-oauth'))) return { ok: false, error: 'oauth_not_connected' };
         // A refresh, if needed, goes through the bridge guard. Codex itself receives the token via
         // ACCESS_TOKEN, as documented by OpenAI; the child has a fresh CODEX_HOME and read-only sandbox.
-        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth_refresh') ?? null;
+        release = egress?.widen?.(['auth.openai.com', 'api.openai.com'], 'chatgpt_oauth_refresh') ?? null;
         const accessToken = await chatGPTAccessToken({ store: keystore, fetch });
         return await testCodexAppServer({ accessToken, version: version || '1.4.19' });
       } catch (e) {
