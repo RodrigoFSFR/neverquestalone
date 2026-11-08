@@ -63,7 +63,7 @@ import { IDENTITY } from './identity.mjs';
 /** The contract's calls, plus the shell's own (setPaused, uninstall). */
 export const API_METHODS = Object.freeze([
   'status', 'providers', 'setKey', 'testKey', 'testStagedKey', 'deleteKey', 'connectCustom', 'choose',
-  'connectChatGPT', 'useChatGPT', 'disconnectChatGPT',
+  'connectChatGPT', 'useChatGPT', 'disconnectChatGPT', 'testCodex',
   'caps', 'setCaps', 'privacy', 'setPrivacy', 'usage', 'connections', 'lastRequest',
   'memory', 'forgetMemory', 'transcripts', 'findWow', 'useWowFolder', 'installAddon', 'wowRunning', 'addonPermissions', 'tightenAddonPermissions', 'diagnostics',
   'setPaused', 'resumeSending', 'uninstall', 'setRetention', 'retentionPreview', 'regenerateSafetyId',
