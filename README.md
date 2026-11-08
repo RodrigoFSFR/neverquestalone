@@ -64,7 +64,7 @@ The normal in-game companion requests use the Responses API with the restricted 
 
 ### Codex app-server check
 
-After connecting ChatGPT, **Test Codex locally** runs one short Codex app-server request to verify that the local Codex CLI and the saved ChatGPT sign-in work together. Install the [official Codex CLI](https://learn.chatgpt.com/docs/codex/cli) first. The app uses OpenAI’s documented OAuth-token handoff (`ACCESS_TOKEN`), so no second Codex sign-in is required.
+After connecting ChatGPT, **Test Codex locally** runs one short Codex app-server request to verify that the local Codex CLI and the saved ChatGPT sign-in work together. Install the [official Codex CLI](https://learn.chatgpt.com/docs/cli) first. The app uses OpenAI’s documented OAuth-token handoff (`ACCESS_TOKEN`), so no second Codex sign-in is required.
 
 The check creates an empty temporary workspace and a separate temporary `CODEX_HOME`, requests read-only sandbox permissions with network access disabled for workspace tools, and removes the temporary files afterward. It consumes a small amount of your plan’s Codex allowance. This is a diagnostic integration test: the game companion continues to use the Responses provider above, not a full Codex agent session.
 
