@@ -321,7 +321,7 @@ export function createSlotWorker({ log = () => {}, waitMs = WORKER_WAIT_MS, watc
       worker = null;
       try { port?.close(); } catch { /* closing */ }
       port = null;
-      try { w?.terminate()?.catch?.(() => {}); } catch { /* ending */ }
+      try { return w?.terminate?.() ?? Promise.resolve(); } catch { return Promise.resolve(); }
     },
     state: () => (state === 'taking' ? 'failed' : state),
     /** Whether jobs are queued (tests, diagnostics, the bench). */
