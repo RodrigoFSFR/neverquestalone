@@ -112,6 +112,17 @@ window.BonesStrings = {
     otherCostLine: 'Cost varies', // Other's row
     hiddenLine: '{ai} isn’t available right now. Pick another.',
     pasteBtn: 'Paste {co} key',
+    signInChatGPT: 'Sign in with ChatGPT',
+    useChatGPT: 'Use saved ChatGPT account',
+    disconnectChatGPT: 'Disconnect ChatGPT account',
+    oauthFailedLine: 'ChatGPT sign-in could not be completed. Check plan and app eligibility, then try again.',
+    chatGPTDisconnectedLine: 'Your ChatGPT account is disconnected.',
+    testCodex: 'Test Codex locally',
+    codexTesting: 'Starting the local Codex app-server test…',
+    codexTestSuccess: 'Codex app-server completed its test request.',
+    codexMissing: 'Codex CLI is not installed or could not be found. Install it, then try again.',
+    codexTimeout: 'Codex did not finish the test in time.',
+    codexTestFailed: 'Codex app-server test failed. Check the Codex CLI installation and ChatGPT sign-in.',
     noKeyLink: 'No key yet?', // a help link that is its question (STYLE §3): the numbered key steps behind it (onboarding critic ON-01)
     keyStepSignIn: 'Click Open {co}’s key page, then sign in or make an account.',
     keyStepBack: 'Come back to this window and click Paste {co} key.',

@@ -48,8 +48,8 @@ export async function slotWorkerGate({ root, importer, dir, waitMs = GATE_WAIT_M
   } catch (e) {
     out.error = String(e?.message ?? e).slice(0, 160);
   } finally {
-    try { writer?.stop(); } catch { /* ended */ }
-    try { fs.rmSync(gateDir, { recursive: true, force: true }); } catch { /* the sandbox goes with the self-test */ }
+    try { await writer?.stop?.(); } catch { /* ended */ }
+    try { fs.rmSync(gateDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 }); } catch { /* the sandbox goes with the self-test */ }
   }
   return out;
 }

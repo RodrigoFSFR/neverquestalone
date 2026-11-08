@@ -32,7 +32,7 @@ It takes 2–3 minutes once you have an API key. You need:
 
 - **World of Warcraft: Forever**, in Windowed or Windowed (Fullscreen) mode, with Enable Sound on in its sound settings.
 - **macOS 14 or later, or Windows 10 or 11.**
-- **An API key** for the AI you want, with a few dollars of credit. [What’s an API key?](#whats-an-api-key)
+- **An AI connection:** either an eligible ChatGPT sign-in or an API key for the AI you want. API keys need credit. [What’s an API key?](#whats-an-api-key)
 
 ### 1 Download
 
@@ -55,6 +55,18 @@ The buttons name the company behind the AI you picked: Anthropic for Claude, Ope
 Using another service, or a model on your own computer? Pick **Other**, click **Connect another AI**, fill in its address (Base URL), key and model, and click **Connect**.
 
 The defaults send the least that works: your character’s name, realm and guild stay out, and other players’ names are swapped for stand-ins. Change them later on the app’s Your data and Settings pages.
+
+### ChatGPT plan sign-in (experimental)
+
+On the OpenAI / ChatGPT card, choose **Sign in with ChatGPT** instead of pasting an API key. The app opens OpenAI in your browser, uses the official Sign in with ChatGPT OAuth flow, and stores the refreshable credentials in your OS credential store. Your existing OpenAI API key, if you have one, remains separate. Plan sign-in availability and model access are checked against the account at connection time; if OpenAI says this app or account is not eligible, use an API key instead.
+
+The normal in-game companion requests use the Responses API with the restricted request format required for ChatGPT-plan OAuth. ChatGPT plan usage limits apply; this is not API credit and it is not unlimited.
+
+### Codex app-server check
+
+After connecting ChatGPT, **Test Codex locally** runs one short Codex app-server request to verify that the local Codex CLI and the saved ChatGPT sign-in work together. Install the [official Codex CLI](https://learn.chatgpt.com/docs/cli) first. The app uses OpenAI’s documented OAuth-token handoff (`ACCESS_TOKEN`), so no second Codex sign-in is required.
+
+The check creates an empty temporary workspace and a separate temporary `CODEX_HOME`, requests read-only sandbox permissions with network access disabled for workspace tools, and removes the temporary files afterward. It consumes a small amount of your plan’s Codex allowance. This is a diagnostic integration test: the game companion continues to use the Responses provider above, not a full Codex agent session.
 
 ### 3 Set up WoW
 

@@ -6,6 +6,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { serveOne, startMock, fixture, mockProvider, collect, textOf, last, req, CANARY } from './helpers/mock-provider.mjs';
+import { responsesRequest } from '../../bridge/byok/providers/adapters/openai.mjs';
+import { loadManifests } from '../../bridge/byok/providers/index.mjs';
 
 async function run(id, name, request, opts = {}) {
   const mock = await serveOne({ ...fixture(id, name), ...(opts.spec || {}) });
@@ -213,4 +215,26 @@ test('the output ceiling is finish "length" on every OpenAI-style path (fix-empt
     const { provider } = mockProvider('google', whole.url);
     assert.deepEqual(last(await collect(provider.stream(req('gemini-3.8-flash')))), { type: 'done', finish: 'length' });
   } finally { await whole.close(); }
+});
+
+
+test('ChatGPT-plan OAuth: Responses request omits API-key-only fields and maps system context to developer', () => {
+  const manifest = loadManifests().find(m => m.id === 'openai');
+  const target = responsesRequest(manifest, luna({ maxTokens: 2048, safetyId: 'should-not-be-sent' }), {
+    authHeaders: { authorization: 'Bearer oauth-access-token' },
+    authKind: 'oauth',
+    requestOptions: { temperature: 0.1, store: true, metadata: { private: true } },
+  });
+  const body = target.body;
+  assert.equal(body.store, false);
+  assert.equal(body.stream, true);
+  assert.equal(body.model, 'gpt-6-luna');
+  assert.ok(!('max_output_tokens' in body));
+  assert.ok(!('safety_identifier' in body));
+  assert.ok(!('temperature' in body));
+  assert.ok(!('metadata' in body));
+  assert.ok(!('include' in body));
+  assert.ok(body.input.every(item => item.role !== 'system'));
+  assert.equal(body.input[0].role, 'developer');
+  assert.equal(target.headers.authorization, 'Bearer oauth-access-token');
 });

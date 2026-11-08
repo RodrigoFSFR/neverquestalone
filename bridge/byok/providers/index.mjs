@@ -711,8 +711,13 @@ export function createProvider(manifest, opts = {}) {
     for (let page = 0; route && page < 10; page++) {
       const r = await getJSON(route, signal, cred);
       if (!r.ok) { logError(r.error); return r; }
-      const { ids, next } = adapter.modelsPage(r.json, route);
-      models.push(...ids);
+      const page = cred.kind === 'oauth'
+        ? { ids: (Array.isArray(r.json?.models) ? r.json.models : Array.isArray(r.json?.data) ? r.json.data : [])
+            .filter(m => m && m.visibility === 'list')
+            .map(m => m.slug || m.id).filter(x => typeof x === 'string') , next: null }
+        : adapter.modelsPage(r.json, route);
+      models.push(...page.ids);
+      const next = page.next;
       route = next;
     }
     return { ok: true, models: [...new Set(models)] };
@@ -773,7 +778,7 @@ export function createProvider(manifest, opts = {}) {
       // so it's dropped.
       let target, payload;
       try {
-        target = adapter.chatRequest(wire, req, { authHeaders: { ...extraHeaders, ...cred.headers }, requestOptions, path: chatPath });
+        target = adapter.chatRequest(wire, req, { authHeaders: { ...extraHeaders, ...cred.headers }, requestOptions, path: chatPath, authKind: cred.kind });
         payload = JSON.stringify(target.body);
         new Headers(target.headers);
       } catch {

@@ -217,6 +217,7 @@ function shippedFiles() {
 /** The modules that may import a network module, and why: none of them reaches the internet. */
 const LOCAL_ONLY = Object.freeze({
   'bridge/transport/capture.mjs': ['node:net', 'the capture helper\'s local socket (a Unix socket in the app\'s own folder)'],
+  'bridge/byok/auth/chatgpt-oauth.mjs': ['node:http', 'the OAuth authorization callback binds only to an ephemeral 127.0.0.1 loopback port; it never opens an internet connection'],
   'app/desktop/src/capture-gate.mjs': ['node:net', 'the packaged self-test\'s check of the capture helper (code health BR-01): a Unix socket in a temp folder of its own, only under --self-test'],
   'app/desktop/src/extra-ca.mjs': ['node:tls', 'the packaged self-test\'s count of the certificates NODE_EXTRA_CA_CERTS added (SR-05): tls.getCACertificates(\'extra\'), a list read, never a connection, only under --self-test'],
 });

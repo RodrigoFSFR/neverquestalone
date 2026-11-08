@@ -43,23 +43,40 @@ async function readAll(body, limit = 1 << 20) {
 
 // ---- Responses API -------------------------------------------------------------
 
-export function responsesRequest(manifest, req, { authHeaders = {}, requestOptions = null, path } = {}) {
+export function responsesRequest(manifest, req, { authHeaders = {}, requestOptions = null, path, authKind = 'key' } = {}) {
+  const oauth = authKind === 'oauth';
   const input = [];
   const sys = systemText(req.system);
-  if (sys) input.push({ role: 'system', content: sys });
-  for (const m of req.messages || []) input.push({ role: m.role, content: String(m.content ?? '') });
-  const core = { model: req.model, input, max_output_tokens: req.maxTokens ?? manifest.limits.maxOutputTokens };
-  const body = requestBody(manifest.defaultRequestOptions, effortFragment(manifest, req.model, req.effort), requestOptions, core);
-  body.input = input;
-  body.stream = true;
-  body.store = false; // PRD §7.2: always, for OpenAI and xAI
-  const effort = body.reasoning?.effort;
-  if (effort && effort !== 'none') {
-    const include = Array.isArray(body.include) ? body.include : [];
-    body.include = include.includes('reasoning.encrypted_content') ? include : [...include, 'reasoning.encrypted_content'];
+  // ChatGPT-plan OAuth is a restricted Responses API surface: use developer, never system.
+  if (sys) input.push({ role: oauth ? 'developer' : 'system', content: sys });
+  for (const m of req.messages || []) {
+    const role = oauth && m.role === 'system' ? 'developer' : m.role;
+    input.push({ role, content: String(m.content ?? '') });
   }
-  if (manifest.safetyIdentifier && req.safetyId) body.safety_identifier = String(req.safetyId);
-  else delete body.safety_identifier;
+  let body;
+  if (oauth) {
+    // Do not send unsupported public-API features through plan OAuth. In particular there is
+    // no max_output_tokens, safety_identifier, previous_response_id, tools, or storage.
+    body = { model: req.model, input, stream: true, store: false };
+    const effort = effortFragment(manifest, req.model, req.effort);
+    if (effort?.reasoning) body.reasoning = structuredClone(effort.reasoning);
+    for (const key of ['background','conversation','max_output_tokens','max_tool_calls','metadata','moderation',
+      'multi_agent','prompt','prompt_cache_retention','safety_identifier','temperature','top_logprobs','top_p','truncation','user',
+      'previous_response_id','tools','tool_choice','parallel_tool_calls','include']) delete body[key];
+  } else {
+    const core = { model: req.model, input, max_output_tokens: req.maxTokens ?? manifest.limits.maxOutputTokens };
+    body = requestBody(manifest.defaultRequestOptions, effortFragment(manifest, req.model, req.effort), requestOptions, core);
+    body.input = input;
+    body.stream = true;
+    body.store = false; // always, for API-key OpenAI and xAI
+    const effort = body.reasoning?.effort;
+    if (effort && effort !== 'none') {
+      const include = Array.isArray(body.include) ? body.include : [];
+      body.include = include.includes('reasoning.encrypted_content') ? include : [...include, 'reasoning.encrypted_content'];
+    }
+    if (manifest.safetyIdentifier && req.safetyId) body.safety_identifier = String(req.safetyId);
+    else delete body.safety_identifier;
+  }
   return target(manifest, path || manifest.paths.chat, authHeaders, body);
 }
 

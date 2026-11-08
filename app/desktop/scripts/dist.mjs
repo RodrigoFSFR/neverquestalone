@@ -21,6 +21,7 @@
 // (bridge/capture/mac/build-app.sh --universal --adhoc --public; the signing step re-signs it with
 // the Developer ID), and scripts/fuses.cjs fails any build without its helper.
 //   node scripts/dist.mjs --mac        node scripts/dist.mjs --win --x64
+import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -74,6 +75,21 @@ console.log(`${IDENTITY.productName} release build`);
 console.log(`  macOS signing:   ${set('CSC_LINK') || set('CSC_NAME') ? 'CSC_LINK/CSC_NAME set' : 'none (unsigned; keychain discovery off)'}`);
 console.log(`  notarization:    ${set('APPLE_API_KEY', 'APPLE_API_KEY_ID', 'APPLE_API_ISSUER') || set('APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID') ? 'APPLE_* set' : 'none'}`);
 console.log(`  Windows signing: ${azure ? 'Azure Artifact Signing (the pinned TrustedSigning module)' : set('WIN_CSC_LINK') || set('CSC_LINK') ? 'certificate' : 'none (unsigned)'}${set('NQA_PUBLISHER_NAME') ? ', publisher pinned' : ''}`);
+
+// A local Windows packaging run builds the native helper first when it is absent. CI also
+// builds it in a pinned Zig job and downloads it into the same path before packaging.
+if (args.some(a => a === '--win' || a.startsWith('--win=')) && process.platform === 'win32') {
+  const helper = path.resolve(ROOT, '../../bridge/capture/windows/build/nqa-capture.exe');
+  if (!fs.existsSync(helper)) {
+    console.log('  capture helper:  not built yet; compiling with MinGW-w64');
+    const script = path.resolve(ROOT, '../../bridge/capture/windows/build.sh');
+    const build = spawnSync('bash', [script, '--native'], { cwd: path.dirname(script), stdio: 'inherit', env });
+    if (build.error || build.status !== 0) {
+      console.error('The Windows capture helper could not be built. Install MinGW-w64 and Git Bash, then run npm run dist:win again.');
+      process.exit(build.status || 1);
+    }
+  }
+}
 
 // The capture helper goes in Resources (electron-builder.yml); a Mac build without it is refused.
 const { macCaptureBuild } = createRequire(import.meta.url)('./fuses.cjs');

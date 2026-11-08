@@ -61,3 +61,25 @@ The self-test ends through the app's real quit, never `app.exit` (systems critic
 ## Uninstall
 
 In the app (General → Uninstall): the bridge's `uninstall` removes the keys and, when asked, the addon; the shell turns off the login item, resets Screen Recording for the app and the capture helper on macOS, shows the last step (drag the app to the Trash, …) in a dialog that stays until Okay, then quits and deletes the data folder, the logs folder, electron-updater's cache and Squirrel.Mac's (`src/uninstall.mjs`). The Windows uninstaller (`build/installer.nsh`) also removes the Run value, the `NeverQuestAlone` credentials (and the `NeverQuestAlone` ones earlier alpha builds saved) and the update cache, except when it runs as part of an update.
+
+
+## Windows installer and portable ZIP
+
+From the repository root on Windows, run:
+
+```powershell
+npm ci
+cd app/desktop
+npm ci
+npm run dist:win
+```
+
+The command produces an NSIS setup installer and a ZIP build in `app/desktop/dist/`. Electron and Node.js are bundled; the capture helper is compiled automatically when it is missing. A local Windows build needs Git Bash and MinGW-w64 on PATH (the MSYS2 UCRT64 MinGW-w64 toolchain works). The build script statically links the helper against Windows system libraries and rejects networking DLL imports. CI builds the helper with pinned Zig, checks reproducibility, then includes it in both artifacts.
+
+The packaged app resolves the helper under Electron's `process.resourcesPath/capture/nqa-capture.exe`; it does not depend on the source checkout or the developer's PATH. The helper remains an external resource because executables cannot run from inside `app.asar`.
+
+## CI and publishing a Windows release
+
+Every push and pull request runs the existing test workflow and the Windows packaging workflow. Packaging artifacts are attached to the workflow run for review. To publish a GitHub Release, update the desktop version in `app/desktop/package.json` (and keep it aligned with the root version), commit the change on the intended release branch, then push a matching tag such as `v1.4.20`. The tag version must match the desktop package version. The workflow builds the installer and portable ZIP and creates a GitHub Release with both files and generated release notes. Publishing uses the workflow's short-lived `GITHUB_TOKEN`; no signing secret is needed.
+
+These Windows artifacts are unsigned. A production code-signing certificate and publisher identity remain a separate manual setup if signed downloads are required. The workflow does not publish from pull requests or ordinary branch pushes.

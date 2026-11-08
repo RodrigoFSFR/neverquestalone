@@ -1,0 +1,98 @@
+# Windows standalone artifacts. Existing test.yml remains the CI test gate; this workflow
+# builds the self-contained installer and ZIP on pushes/PRs and publishes only version tags.
+name: windows-packages
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+
+concurrency:
+  group: windows-packages-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DESKTOP_DIR: app/desktop
+  WIN_HELPER_OUT: bridge/capture/windows/build
+
+jobs:
+  capture-helper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch pinned Zig and verify its checksum
+        run: bridge/capture/windows/fetch-zig.sh "$RUNNER_TEMP/zig" >> "$GITHUB_ENV"
+      - name: Build the Windows helper twice and check reproducibility
+        run: bridge/capture/windows/build.sh
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: capture-windows-helper
+          path: bridge/capture/windows/build/nqa-capture.exe*
+          if-no-files-found: error
+          retention-days: 7
+
+  windows:
+    needs: capture-helper
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Install the locked Electron dependencies
+        run: npm ci --ignore-scripts
+        working-directory: ${{ env.DESKTOP_DIR }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: capture-windows-helper
+          path: ${{ env.WIN_HELPER_OUT }}
+      - name: Build installer and portable ZIP (unsigned)
+        run: node scripts/dist.mjs --win nsis zip --x64 --publish never
+        working-directory: ${{ env.DESKTOP_DIR }}
+      - name: Verify Electron fuses and bundled helper
+        shell: bash
+        run: |
+          node tools/check-fuses.mjs "$DESKTOP_DIR/dist/win-unpacked"
+          test -f "$DESKTOP_DIR/dist/win-unpacked/resources/capture/nqa-capture.exe"
+          ls "$DESKTOP_DIR"/dist/NeverQuestAlone-Setup-*.exe
+          ls "$DESKTOP_DIR"/dist/*.zip
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-packages
+          path: |
+            ${{ env.DESKTOP_DIR }}/dist/*.exe
+            ${{ env.DESKTOP_DIR }}/dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-packages
+          path: release-assets
+      - name: Check tag matches the app version
+        run: |
+          version="$(node -p 'require("./package.json").version')"
+          test "$GITHUB_REF_NAME" = "v$version" || { echo "tag $GITHUB_REF_NAME does not match package version $version"; exit 1; }
+        working-directory: ${{ env.DESKTOP_DIR }}
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-assets/* --verify-tag --generate-notes --title "NeverQuestAlone $GITHUB_REF_NAME"

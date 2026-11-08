@@ -144,6 +144,7 @@ import { createMemory, liveQuests } from './runtime/memory.mjs';
 import { applyLogbook } from './runtime/logbook.mjs';
 import { sanitizeState, sanitizeArgs, sanitizeGameString, typedLooksLikeKey } from './runtime/sanitize.mjs';
 import { createPriceBook, localPrice } from './usage/prices.mjs';
+import { chatGPTAccessToken } from './auth/chatgpt-oauth.mjs';
 import { estimateTurn, meterReply } from './usage/meter.mjs';
 import { createCaps, localDay } from './usage/caps.mjs';
 import { createLedger } from './ledger.mjs';
@@ -554,8 +555,11 @@ export function createLocalBackend(handlers = {}, opts = {}) {
     const provider = createProvider(manifest, {
       getKey: async (id) => {
         if (!keystore) return null;
-        const key = await keystore.get(id);
-        return key && settings.auth === 'oauth' ? { key, kind: 'oauth' } : key;
+        if (id === 'openai' && settings.auth === 'oauth') {
+          const key = await chatGPTAccessToken({ store: keystore, fetch: opts.fetch ?? globalThis.fetch });
+          return { key, kind: 'oauth' };
+        }
+        return keystore.get(id);
       },
       log,
       now: clock,
@@ -774,10 +778,26 @@ export function createLocalBackend(handlers = {}, opts = {}) {
   async function checkKey() {
     let p;
     try { p = current(); } catch { keyState = 'missing'; keyReason = 'unknown provider'; return; }
-    if (p.local) { keyState = 'ok'; return; }
-    // Other (custom) runs with or without a key: the service it names decides (a 401 is auth_invalid).
+    if (p.local) { keyState = 'ok'; keyReason = null; return; }
+    // A provider that explicitly permits keyless access (including a home-network model server)
+    // does not require a keystore. Its endpoint decides whether a credential is needed.
     if (p.manifest.auth?.optional === true) { if (keyState === 'missing') { keyState = 'ok'; keyReason = null; } return; }
     if (!keystore) { keyState = 'missing'; keyReason = 'no key store'; return; }
+    // ChatGPT plan OAuth credentials live in the large secure store, not the API-key slot list.
+    // Validate/refresh the OAuth access token here so status() agrees with the credential path
+    // used by createProvider(). A successful browser callback must not be reported as "no key".
+    if (p.id === 'openai' && settings.auth === 'oauth') {
+      try {
+        await chatGPTAccessToken({ store: keystore, fetch: opts.fetch ?? globalThis.fetch });
+        keyState = 'ok';
+        keyReason = null;
+      } catch (error) {
+        keyState = 'missing';
+        keyReason = error?.message === 'oauth_not_connected' ? 'no ChatGPT sign-in' : 'ChatGPT sign-in unavailable';
+      }
+      return;
+    }
+    // Other providers with required credentials are checked in the OS key store.
     try {
       const has = typeof keystore.list === 'function' ? (await keystore.list([p.id])).includes(p.id) : !!(await keystore.get(p.id));
       if (!has) { keyState = 'missing'; keyReason = 'no key'; } else if (keyState === 'missing') { keyState = 'ok'; keyReason = null; }

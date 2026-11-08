@@ -1599,6 +1599,7 @@
       case 'restart': return { kind: 'bad', line: R('restartLine'), primary: P2(T('common.notRunning.quitReopenBtn'), function () { return B.relaunch(); }, 'quit-reopen'), focus: 'quit-reopen' };
       case 'keystore_error': return { kind: 'bad', line: R('keystoreErrorLine'), primary: P2(T('ai.saveAgainBtn'), function () { return retryKey(pid, where); }, 'save-again'), focus: 'save-again' };
       case 'read_failed': return { kind: 'bad', line: R('readFailedLine'), primary: paste(), focus: 'paste-key' };
+      case 'oauth_failed': return { kind: 'bad', line: T('ai.oauthFailedLine'), primary: P2(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'signin-chatgpt'), focus: 'signin-chatgpt' };
       case 'stage_expired': return { kind: 'warn', line: R('stageExpiredLine'), primary: paste(), focus: 'paste-key' };
       case 'busy': return { kind: 'warn', line: R('busyLine'), primary: null, focus: 'paste-key' };
       default: return { kind: 'bad', line: R('failedLine'), primary: retry(), focus: 'test-again' };
@@ -1732,6 +1733,57 @@
    * (the cheaper model, the privacy switches as they are, start at login on, notifications on, no
    * daily limit), each changeable on Your AI, Usage and Settings.
    */
+  function chatGPTSignIn(where) {
+    return B.connectChatGPT().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        if (res && res.ok) showResult({ ok: true, provider: 'openai', ai: 'ChatGPT' }, where);
+        else showResult({ ok: false, error: 'oauth_failed', provider: 'openai' }, where);
+      });
+    }).catch(function () {
+      showResult({ ok: false, error: 'oauth_failed', provider: 'openai' }, where);
+    });
+  }
+  function useChatGPT(where) {
+    return B.useChatGPT().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        if (res && res.ok) showResult({ ok: true, provider: 'openai', ai: 'ChatGPT' }, where);
+        else showResult({ ok: false, error: 'failed', provider: 'openai', detail: res && res.error ? String(res.error) : 'The saved ChatGPT sign-in could not be used.' }, where);
+      });
+    }).catch(function () {
+      showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+    });
+  }
+  function testCodex(where) {
+    say(T('ai.codexTesting'));
+    return B.testCodex().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        if (res && res.ok) say(T('ai.codexTestSuccess'));
+        else if (res && res.error === 'codex_not_installed') say(T('ai.codexMissing'));
+        else if (res && res.error === 'codex_timeout') say(T('ai.codexTimeout'));
+        else say(T('ai.codexTestFailed'));
+        rerender();
+      });
+    }).catch(function () {
+      say(T('ai.codexTestFailed'));
+      rerender();
+    });
+  }
+
+  function disconnectChatGPT(where) {
+    return B.disconnectChatGPT().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        if (res && res.ok) {
+          var st = KS(where);
+          if (st) st.slot = null;
+          say(T('ai.chatGPTDisconnectedLine'));
+          rerender();
+        } else showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+      });
+    }).catch(function () {
+      showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+    });
+  }
+
   function afterConnect(where) {
     if (where === 'pick') { S.ya = null; rerender(true); return; }
     var st = S.setup;
@@ -1855,7 +1907,8 @@
           var ok = st.slot && st.slot.ok && (st.slot.provider === id || (!st.slot.provider && st.pick === id));
           var chipNode = null;
           if (id === 'custom') chipNode = customOf() && cur && cur.id === 'custom' && aiReady() ? chip(T('ai.connectedChip'), 'ok') : null;
-          else if (ok) chipNode = null; // the tick and the result line say it (APP-D-29)
+          else if (ok) chipNode = null;
+          else if (id === 'openai' && p.oauth && p.oauth.connected) chipNode = chip(T('ai.connectedChip'), 'ok'); // the tick and the result line say it (APP-D-29)
           else if (!(st.slot && st.pick === id) && k.saved) chipNode = rejectedKey(k) ? chip(T('ai.keyRejectedChip'), 'bad') : k.state === 'no_credit' ? chip(T('ai.noCreditChip'), 'warn') : chip(T('ai.keySavedChip'), 'ok');
           var cost = costOf(id);
           return h('button', { type: 'button', class: 'choice' + (checked ? ' is-checked' : ''), 'data-fk': 'card-' + id, id: 'choice-' + id },
@@ -1894,6 +1947,9 @@
     var main = null;
     var quietNode = null;
     var ghostNode = null;
+    var oauthNode = null;
+    var codexNode = null;
+    var disconnectNode = null;
     if (isCustom(pid)) {
       var customReady = customOf() && isCustom((P().provider || {}).id) && aiReady();
       main = customReady && where === 'ai'
@@ -1934,10 +1990,20 @@
       }, 'btn-link',
         { fk: 'no-key', 'aria-expanded': st.noKey ? 'true' : 'false', 'aria-controls': 'no-key-box' });
     }
+    // ChatGPT has a separate plan-sign-in route. Its credentials never masquerade as an API key.
+    if (pid === 'openai') {
+      if (p.oauth && p.oauth.connected) {
+        oauthNode = busyBtn(T('ai.useChatGPT'), function () { return useChatGPT(where); }, 'btn btn-quiet', { fk: 'use-chatgpt' });
+        codexNode = busyBtn(T('ai.testCodex'), function () { return testCodex(where); }, 'btn btn-quiet', { fk: 'test-codex' });
+        disconnectNode = busyBtn(T('ai.disconnectChatGPT'), function () { return disconnectChatGPT(where); }, 'btn-link', { fk: 'disconnect-chatgpt' });
+      } else if (!(r && r.primary && r.primary.fk === 'signin-chatgpt')) {
+        oauthNode = busyBtn(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'btn btn-quiet', { fk: 'signin-chatgpt' });
+      }
+    }
     // Your AI's Switch: a key saved for an AI that isn't in use can go too (the one in use has its Key row's).
     var cur = P().provider;
     var drop = where === 'pick' && !r && !busyPaste && k.saved && !isCustom(pid) && !(cur && cur.id === pid) ? deleteKeyBtn(pid, 'btn btn-quiet btn-danger') : null;
-    return h('div', { class: 'actions', 'data-key': 'actions' }, main, quietNode, ghostNode, drop);
+    return h('div', { class: 'actions', 'data-key': 'actions' }, main, oauthNode, codexNode, quietNode, ghostNode, disconnectNode, drop);
   }
   /** The result slot: one line, under the actions, reserved so its first line doesn't move them. */
   function slotLine(st, where) {

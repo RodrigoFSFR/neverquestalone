@@ -560,6 +560,48 @@ export const HANDLERS = {
     },
   },
   providers: { input: NONE, run: ctx => ctx.api.providers() },
+  connectChatGPT: {
+    input: NONE,
+    announce: true,
+    confirm: () => ({
+      message: 'Sign in to ChatGPT?',
+      detail: 'NeverQuestAlone will open your browser for OpenAI sign-in. Your ChatGPT plan may be used for AI requests from this app, subject to OpenAI and plan eligibility. Requests include the game context enabled in this app. The sign-in tokens stay in your OS credential store.',
+      okLabel: 'Continue to sign in',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+    }),
+    run: ctx => ctx.api.connectChatGPT(),
+  },
+  useChatGPT: {
+    input: NONE,
+    confirm: () => ({
+      message: 'Use your saved ChatGPT account?',
+      detail: 'NeverQuestAlone will switch AI requests to your saved ChatGPT sign-in. API-key credentials, if saved, remain separate.',
+      okLabel: 'Use ChatGPT',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+    }),
+    run: ctx => ctx.api.useChatGPT(),
+  },
+  testCodex: {
+    input: NONE,
+    confirm: () => ({
+      message: 'Test Codex with your ChatGPT account?',
+      detail: 'NeverQuestAlone will launch your locally installed Codex app-server and make one short request using your saved ChatGPT sign-in. It uses a new empty temporary workspace, a read-only sandbox, and no existing Codex configuration or MCP servers. This uses your ChatGPT plan’s Codex allowance.',
+      okLabel: 'Run Codex test',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+    }),
+    run: ctx => ctx.api.testCodex(),
+  },
+  disconnectChatGPT: {
+    input: NONE,
+    confirm: () => ({
+      message: 'Disconnect your ChatGPT account?',
+      detail: 'NeverQuestAlone will revoke and remove the saved ChatGPT OAuth credentials. An OpenAI API key, if you have one, is kept separately.',
+      okLabel: 'Disconnect',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+      destructive: true,
+    }),
+    run: ctx => ctx.api.disconnectChatGPT(),
+  },
   appInfo: { input: NONE, run: ctx => ctx.info() },
   notices: { input: NONE, run: ctx => ctx.notices() },
   appState: { input: NONE, run: ctx => ctx.appState.get() },
