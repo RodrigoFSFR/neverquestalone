@@ -18,7 +18,8 @@
     "icons": "node scripts/make-icons.mjs",
     "pack": "electron-builder --dir",
     "dist": "node scripts/dist.mjs",
-    "fuses": "electron-fuses read --app"
+    "fuses": "electron-fuses read --app",
+    "dist:win": "node scripts/dist.mjs --win nsis zip --x64 --publish never"
   },
   "devDependencies": {
     "@electron/fuses": "2.1.3",
