@@ -1087,9 +1087,24 @@ test('byok e2e (B2.11): the faults that change the backend: a rejected key, an e
     assert.equal(a.bridge.store.outbox.length, 1);
     await a.bridge.stop();
 
-    const o = await oneFault(t, { url: mock.url, keystore: await canaryKeystore(), byok: { auth: 'oauth' } });
+    // Exercise the real ChatGPT OAuth path: an unexpired saved OAuth bundle on the OpenAI
+    // provider, then a 401 from the provider. Setting auth:'oauth' on Anthropic would only
+    // exercise an API-key credential, because plan OAuth is intentionally OpenAI-specific.
+    const oauthStore = await canaryKeystore(['openai']);
+    await oauthStore.setLarge('openai-oauth', JSON.stringify({
+      client_id: 'test-client',
+      access_token: 'test-access-token',
+      refresh_token: 'test-refresh-token',
+      id_token: 'test-id-token',
+      expires_at: Date.now() + 60 * 60_000,
+    }));
+    const o = await oneFault(t, {
+      url: mock.url,
+      keystore: oauthStore,
+      byok: { provider: 'openai', auth: 'oauth' },
+    });
     assert.equal(o.e.kind, 'oauth_expired');
-    assert.equal(o.e.text, 'Your Anthropic sign-in ended. Sign in again in the NeverQuestAlone app.');
+    assert.equal(o.e.text, 'Your OpenAI sign-in ended. Sign in again in the NeverQuestAlone app.');
     assert.equal(o.e.action, 'desktop');
     await o.bridge.stop();
   } finally { await mock.close(); }
