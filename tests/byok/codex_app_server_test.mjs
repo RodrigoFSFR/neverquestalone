@@ -50,7 +50,10 @@ test('Codex app-server uses the documented OAuth environment handoff and isolate
   assert.ok(fs.existsSync(spawn.last.options.cwd) === false, 'temporary workspace is removed after the test');
   assert.deepEqual(spawn.calls[0].params.clientInfo, { name: 'neverquestalone', title: 'NeverQuestAlone', version: 'test' });
   assert.equal(spawn.calls.find(x => x.method === 'thread/start').params.sandbox, 'read-only');
-  assert.equal(spawn.calls.find(x => x.method === 'turn/start').params.sandboxPolicy.networkAccess, false);
+  const turn = spawn.calls.find(x => x.method === 'turn/start').params;
+  assert.equal(turn.sandboxPolicy.type, 'readOnly');
+  assert.equal(turn.sandboxPolicy.networkAccess, false);
+  assert.deepEqual(turn.sandboxPolicy.access, { type: 'restricted', includePlatformDefaults: false, readableRoots: [turn.cwd] });
 });
 
 test('Codex app-server refuses to start without an access token', async () => {
