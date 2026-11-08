@@ -10,7 +10,8 @@ const TOKEN = 'https://auth.openai.com/api/accounts/oauth/token';
 const ISSUER = 'https://auth.openai.com';
 const RESOURCE = 'https://api.openai.com/v1';
 const SCOPES = 'openid profile email offline_access resource.invoke chatgpt.tokens.use.direct';
-const HOST_ID = 'urn:uuid:8a42b130-51d1-4f1b-9c0d-1f0cbf9e88a2';
+const HOST_ID_STORE = 'openai-oauth-host-id';
+const HOST_ID_RE = /^urn:uuid:[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
 const b64url = b => Buffer.from(b).toString('base64url');
 const sha256 = s => crypto.createHash('sha256').update(s).digest('base64url');
@@ -85,6 +86,11 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
   const priorRaw = await store.getLarge('openai-oauth');
   let prior = null;
   try { prior = priorRaw ? JSON.parse(priorRaw) : null; } catch {}
+  let hostId = await store.get(HOST_ID_STORE);
+  if (!HOST_ID_RE.test(hostId || '')) {
+    hostId = `urn:uuid:${crypto.randomUUID()}`;
+    await store.set(HOST_ID_STORE, hostId);
+  }
   const verifier = b64url(crypto.randomBytes(32));
   const challenge = sha256(verifier);
   const state = b64url(crypto.randomBytes(32));
@@ -123,7 +129,7 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
   Object.entries({
     response_type: 'code', client_id: clientId, redirect_uri: redirectUri, scope: SCOPES,
     resource: RESOURCE, code_challenge: challenge, code_challenge_method: 'S256',
-    state, nonce, ext_agent_host_id: HOST_ID,
+    state, nonce, ext_agent_host_id: hostId,
     ...(!prior ? { agent_name_hint: 'neverquestalone' } : {}),
     ...(prior?.id_token ? { id_token_hint: prior.id_token } : {}),
   }).forEach(([k,v]) => auth.searchParams.set(k,v));
@@ -197,4 +203,4 @@ export async function disconnectChatGPT({ store, fetch: fetchFn = globalThis.fet
   return { ok: true };
 }
 
-export const CHATGPT_OAUTH = Object.freeze({ authUrl: AUTH, tokenUrl: TOKEN, resource: RESOURCE, scopes: SCOPES, hostId: HOST_ID });
+export const CHATGPT_OAUTH = Object.freeze({ authUrl: AUTH, tokenUrl: TOKEN, resource: RESOURCE, scopes: SCOPES, hostIdStore: HOST_ID_STORE });
