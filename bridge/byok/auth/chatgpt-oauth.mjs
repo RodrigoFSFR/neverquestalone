@@ -57,6 +57,7 @@ async function verifyIdToken(token, { clientId, nonce, fetch: fetchFn, metadata 
   if (!jwksUrl) throw new Error('oauth_bad_jwks_uri');
   const jwks = await json(await fetchFn(jwksUrl, { headers: { accept: 'application/json' }, redirect: 'error' }));
   const jwk = (jwks.keys || []).find(k => k.kid === header.kid &&
+    (k.use == null || k.use === 'sig') && (!Array.isArray(k.key_ops) || k.key_ops.includes('verify')) &&
     (header.alg === 'RS256' ? k.kty === 'RSA' : k.kty === 'EC' && k.crv === 'P-256'));
   if (!jwk) throw new Error('oauth_bad_id_token_key');
   const key = crypto.createPublicKey({ key: jwk, format: 'jwk' });
@@ -67,7 +68,9 @@ async function verifyIdToken(token, { clientId, nonce, fetch: fetchFn, metadata 
     : crypto.verify('sha256', signed, { key, dsaEncoding: 'ieee-p1363' }, signature);
   const now = Math.floor(Date.now()/1000);
   const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
-  if (!valid || claims.iss !== ISSUER || !aud.includes(clientId) || claims.nonce !== nonce ||
+  const authorizedPartyOk = aud.length <= 1 ? (claims.azp == null || claims.azp === clientId) : claims.azp === clientId;
+  if (!valid || claims.iss !== ISSUER || !aud.includes(clientId) || !authorizedPartyOk ||
+      claims.nonce !== nonce || !Number.isFinite(claims.iat) || claims.iat > now + 60 ||
       !Number.isFinite(claims.exp) || claims.exp <= now || (claims.nbf && claims.nbf > now + 60)) {
     throw new Error('oauth_id_token_validation_failed');
   }
