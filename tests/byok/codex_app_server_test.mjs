@@ -5,7 +5,7 @@ import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import { testCodexAppServer } from '../../bridge/byok/codex/app-server.mjs';
 
-function fakeSpawn({ complete = true, exitAfter = false } = {}) {
+function fakeSpawn({ complete = true, exitAfter = false, stallAt = null } = {}) {
   const calls = [];
   const spawn = (command, args, options) => {
     const child = new EventEmitter();
@@ -14,7 +14,7 @@ function fakeSpawn({ complete = true, exitAfter = false } = {}) {
       write(line) {
         const msg = JSON.parse(line);
         calls.push(msg);
-        if (!msg.id) return true;
+        if (!msg.id || msg.method === stallAt) return true;
         let result = {};
         if (msg.method === 'thread/start') result = { thread: { id: 'thread-test' } };
         if (msg.method === 'turn/start') result = { turn: { id: 'turn-test', status: 'inProgress' } };
@@ -55,4 +55,12 @@ test('Codex app-server uses the documented OAuth environment handoff and isolate
 
 test('Codex app-server refuses to start without an access token', async () => {
   await assert.rejects(testCodexAppServer({ accessToken: '' }), { code: 'oauth_not_connected' });
+});
+
+test('Codex app-server applies its timeout while waiting for initialize', async () => {
+  const spawn = fakeSpawn({ stallAt: 'initialize' });
+  await assert.rejects(
+    testCodexAppServer({ accessToken: 'test-access-token', spawnProcess: spawn, platform: 'linux', timeoutMs: 5 }),
+    { code: 'codex_timeout' },
+  );
 });
