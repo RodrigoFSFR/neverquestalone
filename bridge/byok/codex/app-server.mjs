@@ -3,7 +3,6 @@
 // project instructions, or existing workspace files are exposed to this one-turn check.
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { PassThrough } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -134,7 +133,7 @@ export async function testCodexAppServer({
       threadId,
       input: [{ type: 'text', text: 'Reply with exactly OK.' }],
       cwd: workspace,
-      sandboxPolicy: { type: 'readOnly' },
+      sandboxPolicy: { type: 'readOnly', networkAccess: false },
       approvalPolicy: 'never',
     });
     const status = await turnDone;
