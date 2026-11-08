@@ -133,7 +133,7 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
     response_type: 'code', client_id: clientId, redirect_uri: redirectUri, scope: SCOPES,
     resource: RESOURCE, code_challenge: challenge, code_challenge_method: 'S256',
     state, nonce, ext_agent_host_id: hostId,
-    ...(!prior ? { agent_name_hint: 'neverquestalone' } : {}),
+    ...(!prior ? { agent_name_hint: 'NeverQuestAlone' } : {}),
     ...(prior?.id_token ? { id_token_hint: prior.id_token } : {}),
   }).forEach(([k,v]) => auth.searchParams.set(k,v));
   let timer;
