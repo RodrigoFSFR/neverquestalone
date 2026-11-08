@@ -1732,6 +1732,36 @@
    * (the cheaper model, the privacy switches as they are, start at login on, notifications on, no
    * daily limit), each changeable on Your AI, Usage and Settings.
    */
+  function chatGPTSignIn(where) {
+    return B.connectChatGPT().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        if (res && res.ok) showResult({ ok: true, provider: 'openai', ai: 'ChatGPT' }, where);
+        else showResult({ ok: false, error: 'failed', provider: 'openai', detail: res && res.error ? String(res.error) : 'ChatGPT sign-in did not complete.' }, where);
+      });
+    }).catch(function () {
+      showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+    });
+  }
+  function useChatGPT(where) {
+    return B.useChatGPT().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        if (res && res.ok) showResult({ ok: true, provider: 'openai', ai: 'ChatGPT' }, where);
+        else showResult({ ok: false, error: 'failed', provider: 'openai', detail: res && res.error ? String(res.error) : 'The saved ChatGPT sign-in could not be used.' }, where);
+      });
+    }).catch(function () {
+      showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+    });
+  }
+  function disconnectChatGPT(where) {
+    return B.disconnectChatGPT().then(function (res) {
+      return ensureProviders().then(refreshStatus).then(function () {
+        showResult(res && res.ok ? { ok: true, provider: 'openai', ai: 'ChatGPT' } : { ok: false, error: 'failed', provider: 'openai' }, where);
+      });
+    }).catch(function () {
+      showResult({ ok: false, error: 'failed', provider: 'openai' }, where);
+    });
+  }
+
   function afterConnect(where) {
     if (where === 'pick') { S.ya = null; rerender(true); return; }
     var st = S.setup;
@@ -1894,6 +1924,8 @@
     var main = null;
     var quietNode = null;
     var ghostNode = null;
+    var oauthNode = null;
+    var disconnectNode = null;
     if (isCustom(pid)) {
       var customReady = customOf() && isCustom((P().provider || {}).id) && aiReady();
       main = customReady && where === 'ai'
@@ -1934,10 +1966,19 @@
       }, 'btn-link',
         { fk: 'no-key', 'aria-expanded': st.noKey ? 'true' : 'false', 'aria-controls': 'no-key-box' });
     }
+    // ChatGPT has a separate plan-sign-in route. Its credentials never masquerade as an API key.
+    if (pid === 'openai') {
+      if (p.oauth && p.oauth.connected) {
+        oauthNode = busyBtn(T('ai.useChatGPT'), function () { return useChatGPT(where); }, 'btn btn-quiet', { fk: 'use-chatgpt' });
+        disconnectNode = busyBtn(T('ai.disconnectChatGPT'), function () { return disconnectChatGPT(where); }, 'btn-link', { fk: 'disconnect-chatgpt' });
+      } else {
+        oauthNode = busyBtn(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'btn btn-quiet', { fk: 'signin-chatgpt' });
+      }
+    }
     // Your AI's Switch: a key saved for an AI that isn't in use can go too (the one in use has its Key row's).
     var cur = P().provider;
     var drop = where === 'pick' && !r && !busyPaste && k.saved && !isCustom(pid) && !(cur && cur.id === pid) ? deleteKeyBtn(pid, 'btn btn-quiet btn-danger') : null;
-    return h('div', { class: 'actions', 'data-key': 'actions' }, main, quietNode, ghostNode, drop);
+    return h('div', { class: 'actions', 'data-key': 'actions' }, main, oauthNode, quietNode, ghostNode, disconnectNode, drop);
   }
   /** The result slot: one line, under the actions, reserved so its first line doesn't move them. */
   function slotLine(st, where) {
