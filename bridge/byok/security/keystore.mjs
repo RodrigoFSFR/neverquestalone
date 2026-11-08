@@ -171,7 +171,7 @@ export function createKeyStore({ backend = 'os', service = SERVICE, platform = p
     },
     async setLarge(base, value) {
       checkProvider(base);
-      if (typeof value !== 'string' || !value || value.length > 10_800 || !/^[\\x21-\\x7e]+$/.test(value)) {
+      if (typeof value !== 'string' || !value || value.length > 10_800 || !/^[\x21-\x7e]+$/.test(value)) {
         throw keyStoreError('bad_key', 'the credential bundle is invalid or too large');
       }
       const chunks = value.match(/.{1,900}/g) || [];
