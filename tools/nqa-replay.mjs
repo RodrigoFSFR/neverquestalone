@@ -70,6 +70,6 @@ try {
   for (const p of sent) console.log(JSON.stringify({ send: p }, null, 2));
 } finally {
   await bridge.stop();
-  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 100 });
 }
 process.exit(code);
