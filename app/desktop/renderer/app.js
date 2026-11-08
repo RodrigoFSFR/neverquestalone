@@ -1599,7 +1599,7 @@
       case 'restart': return { kind: 'bad', line: R('restartLine'), primary: P2(T('common.notRunning.quitReopenBtn'), function () { return B.relaunch(); }, 'quit-reopen'), focus: 'quit-reopen' };
       case 'keystore_error': return { kind: 'bad', line: R('keystoreErrorLine'), primary: P2(T('ai.saveAgainBtn'), function () { return retryKey(pid, where); }, 'save-again'), focus: 'save-again' };
       case 'read_failed': return { kind: 'bad', line: R('readFailedLine'), primary: paste(), focus: 'paste-key' };
-      case 'oauth_failed': return { kind: 'bad', line: R('oauthFailedLine'), primary: P2(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'signin-chatgpt'), focus: 'signin-chatgpt' };
+      case 'oauth_failed': return { kind: 'bad', line: T('ai.oauthFailedLine'), primary: P2(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'signin-chatgpt'), focus: 'signin-chatgpt' };
       case 'stage_expired': return { kind: 'warn', line: R('stageExpiredLine'), primary: paste(), focus: 'paste-key' };
       case 'busy': return { kind: 'warn', line: R('busyLine'), primary: null, focus: 'paste-key' };
       default: return { kind: 'bad', line: R('failedLine'), primary: retry(), focus: 'test-again' };
@@ -1996,7 +1996,7 @@
         oauthNode = busyBtn(T('ai.useChatGPT'), function () { return useChatGPT(where); }, 'btn btn-quiet', { fk: 'use-chatgpt' });
         codexNode = busyBtn(T('ai.testCodex'), function () { return testCodex(where); }, 'btn btn-quiet', { fk: 'test-codex' });
         disconnectNode = busyBtn(T('ai.disconnectChatGPT'), function () { return disconnectChatGPT(where); }, 'btn-link', { fk: 'disconnect-chatgpt' });
-      } else {
+      } else if (!(r && r.primary && r.primary.fk === 'signin-chatgpt')) {
         oauthNode = busyBtn(T('ai.signInChatGPT'), function () { return chatGPTSignIn(where); }, 'btn btn-quiet', { fk: 'signin-chatgpt' });
       }
     }
