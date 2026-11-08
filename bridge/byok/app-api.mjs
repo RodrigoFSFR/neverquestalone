@@ -991,7 +991,7 @@ export function createAppApi(opts = {}) {
       if (!m || !raw) return { ok: false, error: 'oauth_not_connected' };
       let release = null;
       try {
-        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth_refresh') ?? null;
+        release = egress?.widen?.(['auth.openai.com', 'api.openai.com'], 'chatgpt_oauth_refresh') ?? null;
         const probe = createProvider(m, {
           getKey: async () => ({ key: await chatGPTAccessToken({ store: keystore, fetch }), kind: 'oauth' }),
           fetch, log,
