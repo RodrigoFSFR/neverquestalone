@@ -45,6 +45,7 @@ import { displayOf } from './providers/display.mjs';
 import { setupView } from './setup-view.mjs';
 import { createScreenPermission, ASKED_MS } from './screen-permission.mjs';
 import { REPO, LEGACY_CUSTOM } from '../config.mjs';
+import { signInWithChatGPT, disconnectChatGPT } from './auth/chatgpt-oauth.mjs';
 
 export const PRODUCT = 'NeverQuestAlone';
 export const RETENTION_DAYS = 30;
@@ -911,6 +912,54 @@ export function createAppApi(opts = {}) {
       return out;
     },
 
+    async connectChatGPT() {
+      const m = visible('openai');
+      if (!m || !openExternal || !keystore.getLarge || !keystore.setLarge) return { ok: false, error: 'unsupported' };
+      if (down()) return { ok: false, error: 'restart' };
+      let release = null;
+      try {
+        // Only the OAuth issuer and JWKS host are widened for this sign-in operation.
+        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth') ?? null;
+        const signed = await signInWithChatGPT({ store: keystore, openExternal, fetch });
+        if (!signed?.ok) return signed ?? { ok: false, error: 'oauth_failed' };
+        const model = m.models?.default || m.models?.list?.[0]?.id;
+        if (!model) return { ok: false, error: 'no_models' };
+        const effort = startEffort(m, model);
+        const previous = { provider: B().provider, model: B().model, effort: B().effort, auth: B().auth, authBy: B().authBy.openai };
+        B().authBy.openai = 'oauth';
+        Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
+        try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
+        catch (e) {
+          Object.assign(B(), { provider: previous.provider, model: previous.model, effort: previous.effort, auth: previous.auth });
+          if (previous.authBy === undefined) delete B().authBy.openai; else B().authBy.openai = previous.authBy;
+          return { ok: false, error: 'failed' };
+        }
+        persist();
+        try { await S.backend?.refresh?.({ keyChanged: true }); } catch (e) { log('app-oauth-refresh-failed', { error: scrub(e?.message).slice(0, 120) }); }
+        changed();
+        log('app-oauth-connected', { provider: 'openai' });
+        return { ok: true, provider: 'openai', model, expiresAt: signed.expiresAt };
+      } catch (e) {
+        log('app-oauth-connect-failed', { error: scrub(e?.code || e?.message || 'failed').slice(0, 80) });
+        return { ok: false, error: e?.code === 'oauth_timeout' ? 'oauth_timeout' : 'oauth_failed' };
+      } finally { try { release?.(); } catch {} }
+    },
+
+    async disconnectChatGPT() {
+      try { await disconnectChatGPT({ store: keystore, fetch }); }
+      catch (e) { return { ok: false, error: e?.code || 'keystore_error' }; }
+      if (B().authBy.openai === 'oauth') delete B().authBy.openai;
+      if (B().provider === 'openai' && B().auth === 'oauth') {
+        B().auth = 'key';
+        try { await S.backend?.setConfig?.({ auth: 'key' }); } catch {}
+      }
+      persist();
+      try { await S.backend?.refresh?.({ keyChanged: true }); } catch {}
+      changed();
+      log('app-oauth-disconnected', { provider: 'openai' });
+      return { ok: true };
+    },
+
     async providers() {
       const out = [];
       for (const t of manifests) {
@@ -938,6 +987,7 @@ export function createAppApi(opts = {}) {
           name: t.name,
           hidden: !!t.hidden,
           auth: local ? 'local' : 'key',
+          ...(t.id === 'openai' ? { oauth: { connected: await (async () => { try { return !!(await keystore.getLarge('openai-oauth')); } catch { return false; } })() } } : {}),
           models: modelsOf(t),
           ...playerCard(t),
           terms: { link: linkId(t, local ? 'privacy' : 'terms'), recorded: termsOk(t) },
@@ -1064,7 +1114,7 @@ export function createAppApi(opts = {}) {
       // Saved as the level the model runs at: its nearest to the one asked for (a level picked for
       // another model), none for a model without levels, and none asked stays none (the model's own).
       const effort = v.effort == null ? null : nearestEffort(effortLevels(m, v.model), v.effort);
-      const auth = 'key';
+      const auth = m.id === 'openai' && B().authBy.openai === 'oauth' ? 'oauth' : 'key';
       // Other's model is part of its service's settings: a new one is saved with them.
       const custom = isCustom(m) ? { baseUrl: m.baseUrl, model: v.model } : undefined;
       if (custom) B().custom = custom;
