@@ -29,16 +29,34 @@ async function json(res) {
 }
 
 // Verify ID-token signature and all OIDC binding claims. Unknown algorithms and key types fail closed.
-async function verifyIdToken(token, { clientId, nonce, fetch: fetchFn }) {
+async function oidcMetadata(fetchFn) {
+  const metadata = await json(await fetchFn(`${ISSUER}/.well-known/openid-configuration`, {
+    headers: { accept: 'application/json' }, redirect: 'error',
+  }));
+  if (metadata.issuer !== ISSUER) throw new Error('oauth_issuer_mismatch');
+  return metadata;
+}
+
+function trustedIssuerUrl(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && u.hostname === 'auth.openai.com' && !u.username && !u.password ? u.href : null;
+  } catch { return null; }
+}
+
+// Verify the ID-token signature and all OIDC binding claims. Unknown algorithms and key types fail closed.
+async function verifyIdToken(token, { clientId, nonce, fetch: fetchFn, metadata }) {
   const parts = String(token || '').split('.');
   if (parts.length !== 3) throw new Error('oauth_bad_id_token');
   let header, claims;
   try { header = JSON.parse(Buffer.from(parts[0], 'base64url')); claims = JSON.parse(Buffer.from(parts[1], 'base64url')); }
   catch { throw new Error('oauth_bad_id_token'); }
   if (!['RS256','ES256'].includes(header.alg) || !header.kid) throw new Error('oauth_bad_id_token');
-  const jwksRes = await fetchFn(`${ISSUER}/.well-known/jwks.json`, { headers: { accept: 'application/json' }, redirect: 'error' });
-  const jwks = await json(jwksRes);
-  const jwk = (jwks.keys || []).find(k => k.kid === header.kid && k.alg === header.alg);
+  const jwksUrl = trustedIssuerUrl(metadata?.jwks_uri);
+  if (!jwksUrl) throw new Error('oauth_bad_jwks_uri');
+  const jwks = await json(await fetchFn(jwksUrl, { headers: { accept: 'application/json' }, redirect: 'error' }));
+  const jwk = (jwks.keys || []).find(k => k.kid === header.kid &&
+    (header.alg === 'RS256' ? k.kty === 'RSA' : k.kty === 'EC' && k.crv === 'P-256'));
   if (!jwk) throw new Error('oauth_bad_id_token_key');
   const key = crypto.createPublicKey({ key: jwk, format: 'jwk' });
   const signed = Buffer.from(`${parts[0]}.${parts[1]}`);
@@ -111,7 +129,8 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
   }).forEach(([k,v]) => auth.searchParams.set(k,v));
   let timer;
   try {
-    await openExternal(auth.href);
+    const opened = await openExternal(auth.href);
+    if (opened?.ok === false) throw new Error('oauth_browser_open_failed');
     const result = await Promise.race([
       callback,
       new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('oauth_timeout')), timeoutMs); }),
@@ -126,7 +145,8 @@ export async function signInWithChatGPT({ store, openExternal, fetch: fetchFn = 
         !String(tokens.scope || '').split(/\s+/).includes('chatgpt.tokens.use.direct')) {
       throw new Error('oauth_required_scope_missing');
     }
-    await verifyIdToken(tokens.id_token, { clientId: result.issuedClientId, nonce, fetch: fetchFn });
+    const metadata = await oidcMetadata(fetchFn);
+    await verifyIdToken(tokens.id_token, { clientId: result.issuedClientId, nonce, fetch: fetchFn, metadata });
     const bundle = { client_id: result.issuedClientId, access_token: tokens.access_token,
       refresh_token: tokens.refresh_token, id_token: tokens.id_token,
       expires_at: Date.now() + Number(tokens.expires_in || 0) * 1000 };
@@ -164,7 +184,9 @@ export async function disconnectChatGPT({ store, fetch: fetchFn = globalThis.fet
   try { saved = JSON.parse(raw); } catch { saved = null; }
   if (saved?.refresh_token) {
     try {
-      await fetchFn(`${ISSUER}/api/accounts/oauth/revoke`, {
+      const metadata = await oidcMetadata(fetchFn);
+      const endpoint = trustedIssuerUrl(metadata.revocation_endpoint);
+      if (endpoint) await fetchFn(endpoint, {
         method: 'POST', redirect: 'error',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form({ token: saved.refresh_token, token_type_hint: 'refresh_token', client_id: saved.client_id }),
