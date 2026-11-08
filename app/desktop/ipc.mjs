@@ -581,6 +581,16 @@ export const HANDLERS = {
     }),
     run: ctx => ctx.api.useChatGPT(),
   },
+  testCodex: {
+    input: NONE,
+    confirm: () => ({
+      message: 'Test Codex with your ChatGPT account?',
+      detail: 'NeverQuestAlone will launch your locally installed Codex app-server and make one short request using your saved ChatGPT sign-in. It uses a new empty temporary workspace, a read-only sandbox, and no existing Codex configuration or MCP servers. This uses your ChatGPT plan’s Codex allowance.',
+      okLabel: 'Run Codex test',
+      cancelLabel: st('pasteDialog.cancelLabel'),
+    }),
+    run: ctx => ctx.api.testCodex(),
+  },
   disconnectChatGPT: {
     input: NONE,
     confirm: () => ({
