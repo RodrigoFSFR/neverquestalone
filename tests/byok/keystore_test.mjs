@@ -186,19 +186,23 @@ test('keystore: the real OS keychain (opt-in: NQA_TEST_REAL_KEYCHAIN=1)', { skip
 // once: read, write, delete; a key already under the new name wins; the first refusal stops it
 // (the player is asked at most once), and nothing ever reaches the log.
 
-test('keystore: large OAuth bundles round-trip in bounded keyring chunks', async () => {
-  for (const ks of [
+test('keystore: large OAuth bundles round-trip in versioned keyring chunks', async () => {
+  const fake = fakeKeyring();
+  const stores = [
     createKeyStore({ backend: 'memory' }),
-    createKeyStore({ backend: 'os', platform: 'win32', keyring: fakeKeyring().mod }),
-  ]) {
+    createKeyStore({ backend: 'os', platform: 'win32', keyring: fake.mod }),
+  ];
+  for (const ks of stores) {
     const bundle = JSON.stringify({ access_token: 'a'.repeat(1400), refresh_token: 'r'.repeat(1800), id_token: 'i'.repeat(1600), client_id: 'oaiapp_example' });
     await ks.setLarge('openai-oauth', bundle);
     assert.equal(await ks.getLarge('openai-oauth'), bundle);
-    assert.equal((await ks.get('openai-oauth-0')).length, 900);
     await ks.setLarge('openai-oauth', JSON.stringify({ access_token: 'short' }));
     assert.equal(await ks.getLarge('openai-oauth'), JSON.stringify({ access_token: 'short' }));
     assert.equal(await ks.deleteLarge('openai-oauth'), true);
     assert.equal(await ks.getLarge('openai-oauth'), null);
     assert.equal(await ks.deleteLarge('openai-oauth'), false);
   }
+  const meta = JSON.parse(fake.store.get(`${SERVICE}/openai-oauth-meta`) ?? 'null');
+  assert.equal(meta, null, 'the metadata pointer is removed on delete');
+  assert.ok(![...fake.store.keys()].some(k => k.includes('/openai-oauth-') && !k.endsWith('-meta')), 'old generations are cleaned up');
 });
