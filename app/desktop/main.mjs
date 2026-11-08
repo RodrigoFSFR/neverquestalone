@@ -58,6 +58,7 @@ import { zoomAction, nextZoom, cleanZoom } from './src/zoom.mjs';
 import { redactDeep, redactText, secretSet } from './src/redact.mjs';
 import { startUpdater, idleUpdater, releasesUrl } from './updater.mjs';
 import { IDENTITY } from './src/identity.mjs';
+import { isChatGPTAuthorizationUrl } from './src/oauth-browser.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RENDERER_DIR = path.join(HERE, 'renderer');
@@ -355,6 +356,19 @@ async function openLinkUrl(url) {
   if (HEADLESS) return { ok: true };
   await shell.openExternal(u.href);
   return { ok: true };
+}
+
+// OAuth alone may open an external page: only the exact OpenAI authorization endpoint,
+// with PKCE and a loopback callback. The renderer itself still cannot navigate externally.
+async function openChatGPTAuthUrl(url) {
+  if (!isChatGPTAuthorizationUrl(url)) return { ok: false, error: 'bad_link' };
+  if (HEADLESS) return { ok: true };
+  try {
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'browser_open_failed' };
+  }
 }
 
 // The login item: macOS and Windows through Electron (src/login-item.mjs);
@@ -682,7 +696,7 @@ async function start() {
     // The holder serves one boot at a time and never a stopped one (fix-102): a boot stopped while
     // no quit is committed starts again at once, and the window's mode and reason follow each boot.
     live = createLiveApi({
-      boot: () => loadApi({ appDir: HERE, packaged: app.isPackaged, paths, log, openExternal: openLinkUrl, selfTest: SELF_TEST }),
+      boot: () => loadApi({ appDir: HERE, packaged: app.isPackaged, paths, log, openExternal: openChatGPTAuthUrl, selfTest: SELF_TEST }),
       log: holderLog,
       onBoot: (l) => { loaded = l; apiLine(l); },
     });
