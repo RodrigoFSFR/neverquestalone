@@ -123,7 +123,6 @@ export async function testCodexAppServer({
       try { child.kill(); } catch {}
       reject(error('codex_timeout'));
     }, timeoutMs);
-    timeout.unref?.();
   });
 
   try {
@@ -165,10 +164,18 @@ export async function testCodexAppServer({
     // EOF lets app-server exit cleanly; wait briefly before removing its temporary home.
     try { child.stdin.end(); } catch {}
     if (!closed) {
-      await Promise.race([
-        new Promise(resolve => child.once('close', resolve)),
-        new Promise(resolve => { const t = setTimeout(resolve, 1500); t.unref?.(); }),
-      ]);
+      await new Promise(resolve => {
+        let fallback;
+        const onClose = () => {
+          clearTimeout(fallback);
+          resolve();
+        };
+        child.once('close', onClose);
+        fallback = setTimeout(() => {
+          child.removeListener('close', onClose);
+          resolve();
+        }, 1500);
+      });
     }
     if (!closed) { try { child.kill(); } catch {} }
     try { lines.close(); } catch {}
