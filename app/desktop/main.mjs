@@ -682,7 +682,7 @@ async function start() {
     // The holder serves one boot at a time and never a stopped one (fix-102): a boot stopped while
     // no quit is committed starts again at once, and the window's mode and reason follow each boot.
     live = createLiveApi({
-      boot: () => loadApi({ appDir: HERE, packaged: app.isPackaged, paths, log, selfTest: SELF_TEST }),
+      boot: () => loadApi({ appDir: HERE, packaged: app.isPackaged, paths, log, openExternal: openLinkUrl, selfTest: SELF_TEST }),
       log: holderLog,
       onBoot: (l) => { loaded = l; apiLine(l); },
     });
