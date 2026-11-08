@@ -941,13 +941,15 @@ export function createAppApi(opts = {}) {
           return { ok: false, error: 'no_models' };
         }
         const effort = startEffort(m, model);
-        const previous = { provider: B().provider, model: B().model, effort: B().effort, auth: B().auth, authBy: B().authBy.openai };
+        const previous = { provider: B().provider, model: B().model, effort: B().effort, auth: B().auth, authBy: B().authBy.openai, oauthModel: B().authBy.openaiModel };
         B().authBy.openai = 'oauth';
+        B().authBy.openaiModel = model;
         Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
         try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
         catch (e) {
           Object.assign(B(), { provider: previous.provider, model: previous.model, effort: previous.effort, auth: previous.auth });
           if (previous.authBy === undefined) delete B().authBy.openai; else B().authBy.openai = previous.authBy;
+          if (previous.oauthModel === undefined) delete B().authBy.openaiModel; else B().authBy.openaiModel = previous.oauthModel;
           return { ok: false, error: 'failed' };
         }
         persist();
@@ -984,17 +986,33 @@ export function createAppApi(opts = {}) {
       let raw = null;
       try { raw = await keystore.getLarge?.('openai-oauth'); } catch (e) { return { ok: false, error: e?.code || 'keystore_error' }; }
       if (!m || !raw) return { ok: false, error: 'oauth_not_connected' };
-      const model = m.models?.default || m.models?.list?.[0]?.id;
-      if (!model) return { ok: false, error: 'no_models' };
-      const effort = startEffort(m, model);
-      B().authBy.openai = 'oauth';
-      Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
-      try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
-      catch { return { ok: false, error: 'failed' }; }
-      persist();
-      try { await S.backend?.refresh?.({ keyChanged: true }); } catch {}
-      changed();
-      return { ok: true, provider: 'openai', model };
+      let release = null;
+      try {
+        release = egress?.widen?.(['auth.openai.com'], 'chatgpt_oauth_refresh') ?? null;
+        const probe = createProvider(m, {
+          getKey: async () => ({ key: await chatGPTAccessToken({ store: keystore, fetch }), kind: 'oauth' }),
+          fetch, log,
+        });
+        const checked = await probe.validate();
+        if (!checked?.ok) return { ok: false, error: checked?.error?.kind || 'oauth_models_failed' };
+        const available = (checked.models || []).filter(id => (m.models?.list || []).some(entry => entry.id === id));
+        const preferred = B().authBy.openaiModel;
+        const model = available.includes(preferred) ? preferred
+          : available.includes(m.models?.default) ? m.models.default : available[0];
+        if (!model) return { ok: false, error: 'no_models' };
+        const effort = startEffort(m, model);
+        B().authBy.openai = 'oauth';
+        B().authBy.openaiModel = model;
+        Object.assign(B(), { provider: 'openai', model, effort, auth: 'oauth' });
+        try { await S.backend?.setConfig?.({ provider: 'openai', model, effort, auth: 'oauth' }); }
+        catch { return { ok: false, error: 'failed' }; }
+        persist();
+        try { await S.backend?.refresh?.({ keyChanged: true }); } catch {}
+        changed();
+        return { ok: true, provider: 'openai', model };
+      } catch (e) {
+        return { ok: false, error: e?.code || 'oauth_failed' };
+      } finally { try { release?.(); } catch {} }
     },
 
     async disconnectChatGPT() {
@@ -1175,6 +1193,7 @@ export function createAppApi(opts = {}) {
       const custom = isCustom(m) ? { baseUrl: m.baseUrl, model: v.model } : undefined;
       if (custom) B().custom = custom;
       Object.assign(B(), { provider: m.id, model: v.model, effort, auth });
+      if (m.id === 'openai' && auth === 'oauth') B().authBy.openaiModel = v.model;
       try { await S.backend?.setConfig?.({ provider: m.id, model: v.model, effort, auth, ...(custom ? { custom } : {}) }); } catch (e) {
         log('app-choose-failed', { error: scrub(e?.message).slice(0, 120) });
         return { ok: false, error: 'failed' };
