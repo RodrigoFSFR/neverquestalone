@@ -962,7 +962,7 @@ test('one redactor (SY-13): the shell\u2019s redactText is the bridge\u2019s red
 test('main.mjs gives ipc the clipboard’s readText (SY-18), or a saved key never leaves the clipboard (PRD §8.1)', () => {
   const main = fs.readFileSync(path.join(APP, 'main.mjs'), 'utf8');
   assert.match(main, /readText: async \(\) => \(SHOTS \? shotsClipboard : HEADLESS \? '' : clipboard\.readText\(\)\) \},/);
-  assert.match(main, /boot: \(\) => loadApi\(\{[^}]*openExternal: openLinkUrl/s, 'the real bridge receives the system-browser opener for OAuth');
+  assert.match(main, /boot: \(\) => loadApi\(\{[^}]*openExternal: openChatGPTAuthUrl/s, 'the real bridge receives the system-browser opener for OAuth');
 });
 
 // DU-03 (desktop UI critic r2): the page may say "Checking with {co}…" only once the player agreed.
