@@ -60,6 +60,8 @@ export async function testCodexAppServer({
   let completionResolve;
   let completionReject;
   const turnDone = new Promise((resolve, reject) => { completionResolve = resolve; completionReject = reject; });
+  // A process that dies before turn/start must not leave an unhandled turn waiter.
+  turnDone.catch(() => {});
   let closed = false;
   const send = value => {
     if (closed || child.stdin.destroyed) throw error('codex_process_closed');
@@ -108,44 +110,50 @@ export async function testCodexAppServer({
     if (completed === null) completionReject(error(stderr.toLowerCase().includes('not recognized') ? 'codex_not_installed' : 'codex_process_closed'));
   });
 
-  const timeout = setTimeout(() => {
-    completionReject(error('codex_timeout'));
-    try { child.kill(); } catch {}
-  }, timeoutMs);
-  timeout.unref?.();
+  let timeout;
+  const deadline = new Promise((_, reject) => {
+    timeout = setTimeout(() => {
+      try { child.kill(); } catch {}
+      reject(error('codex_timeout'));
+    }, timeoutMs);
+    timeout.unref?.();
+  });
 
   try {
-    await request('initialize', {
-      clientInfo: { name: 'neverquestalone', title: 'NeverQuestAlone', version: String(version) },
-    });
-    notify('initialized');
-    const thread = await request('thread/start', {
-      modelProvider: 'openai_chatgpt_plan',
-      cwd: workspace,
-      sandbox: 'read-only',
-      approvalPolicy: 'never',
-      ephemeral: true,
-      developerInstructions: 'This is a connectivity test. Do not use tools, do not inspect files, and do not run commands. Reply with exactly the word OK.',
-    });
-    const threadId = thread?.thread?.id;
-    if (typeof threadId !== 'string' || !threadId) throw error('codex_bad_thread');
-    await request('turn/start', {
-      threadId,
-      input: [{ type: 'text', text: 'Reply with exactly OK.' }],
-      cwd: workspace,
-      sandboxPolicy: { type: 'readOnly', networkAccess: false },
-      approvalPolicy: 'never',
-    });
-    const status = await turnDone;
-    if (status !== 'completed') throw error('codex_turn_failed');
-    return { ok: true, status: 'completed' };
+    const operation = (async () => {
+      await request('initialize', {
+        clientInfo: { name: 'neverquestalone', title: 'NeverQuestAlone', version: String(version) },
+      });
+      notify('initialized');
+      const thread = await request('thread/start', {
+        modelProvider: 'openai_chatgpt_plan',
+        cwd: workspace,
+        sandbox: 'read-only',
+        approvalPolicy: 'never',
+        ephemeral: true,
+        developerInstructions: 'This is a connectivity test. Do not use tools, do not inspect files, and do not run commands. Reply with exactly the word OK.',
+      });
+      const threadId = thread?.thread?.id;
+      if (typeof threadId !== 'string' || !threadId) throw error('codex_bad_thread');
+      await request('turn/start', {
+        threadId,
+        input: [{ type: 'text', text: 'Reply with exactly OK.' }],
+        cwd: workspace,
+        sandboxPolicy: { type: 'readOnly', networkAccess: false },
+        approvalPolicy: 'never',
+      });
+      const status = await turnDone;
+      if (status !== 'completed') throw error('codex_turn_failed');
+      return { ok: true, status: 'completed' };
+    })();
+    return await Promise.race([operation, deadline]);
   } catch (e) {
     const code = ['codex_not_installed', 'codex_start_failed', 'codex_process_closed', 'codex_timeout',
       'codex_rpc_error', 'codex_bad_thread', 'codex_turn_failed', 'oauth_not_connected'].includes(e?.code)
       ? e.code : 'codex_failed';
     throw error(code);
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
     closed = true;
     try { child.kill(); } catch {}
     try { lines.close(); } catch {}
